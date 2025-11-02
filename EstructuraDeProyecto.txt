@@ -1,0 +1,3025 @@
+=== METADATOS DE EXPORTACIÓN ===
+Proyecto: CONDOMINIO PHP/MySQL APP
+Versión de exportador: 1.3
+Fecha de generación: 02/Nov/2025 11:47:07
+Zona horaria: Europe/Berlin
+Codificación: UTF-8
+Versión PHP: 8.0.30
+Carpeta raíz: C:\xampp\htdocs\condominio
+Autor del exportador: Carlos E. Ornelas
+=================================
+
+=== ESTRUCTURA DEL PROYECTO 'CONDOMINIO' ===
+=== ESTRUCTURA DE CARPETAS ===
+🏠 condominio/
+├── 🔒 .htaccess
+├── 📁 app/
+│   ├── 🧠 brains/
+│   │   ├── 🐘 cuenta.brain.php
+│   │   ├── 🐘 home.brain.php
+│   │   ├── 🐘 login.brain.php
+│   │   ├── 🐘 set-theme.brain.php
+│   │   └── 🐘 test.brain.php
+│   ├── 🗺️ layouts/
+│   │   ├── 🐘 404.layout.php
+│   │   ├── 🐘 cuenta.layout.php
+│   │   ├── 🐘 home.layout.php
+│   │   ├── 🐘 login.layout.php
+│   │   ├── 🧩 partials/
+│   │   │   ├── 🐘 footer.php
+│   │   │   ├── 🐘 header.php
+│   │   │   └── 🐘 navbar.php
+│   │   └── 🐘 test.layout.php
+│   └── 📁 lib/
+│       ├── 🐘 auth.php
+│       ├── 🐘 db.php
+│       └── 🐘 view.php
+├── 📄 condominio.code-workspace
+├── 🐘 config.php
+├── 📄 estructura_compilada.txt
+├── 🐘 helpers.php
+├── 📄 lp65.json
+├── 📁 public/
+│   ├── 🔒 .htaccess
+│   ├── ⚡ Box.js
+│   ├── 📁 api/
+│   │   ├── 🐘 theme-updates.php
+│   │   └── 🐘 theme.php
+│   ├── 📁 css/
+│   │   ├── 🎨 base.css
+│   │   ├── 🎨 styles.css
+│   │   └── 📁 themes/
+│   │       ├── 🎨 theme-blue.css
+│   │       ├── 🎨 theme-deepnote-dark.css
+│   │       ├── 🎨 theme-deepnote-light.css
+│   │       ├── 🎨 theme-green.css
+│   │       └── 🎨 themes-extended.css
+│   ├── 🐘 export_estructura.php
+│   ├── 🐘 index.php
+│   ├── 📁 js/
+│   │   └── ⚡ theme.js
+│   └── 📂 uploads/
+│       └── 📁 media/
+│           └── 📁 images/
+│               ├── 🖼️ logo.png
+│               └── 📁 profiles/
+│                   ├── 🔒 .htaccess
+│                   ├── 🖼️ 126_1760351074.jpg
+│                   ├── 🖼️ 1_1760475685.jpg
+│                   ├── 🖼️ ProfilePic.png
+│                   └── 🖼️ default.png
+└── 📁 shared/
+
+=== CONTENIDO DE ARCHIVOS ===
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\.htaccess'
+FILE CONTENT:{
+# /condominio/.htaccess
+RewriteEngine On
+
+# Evitar bucles: si ya está dentro de /public, no hacer nada
+RewriteCond %{REQUEST_URI} !^/condominio/public/
+RewriteRule ^(.*)$ public/$1 [L,QSA]
+
+}
+=== FILE END ===
+
+[DIR]: 'app'
+
+[DIR]: 'app\brains'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\brains\cuenta.brain.php'
+FILE CONTENT:{
+<?php
+require_once LIB_DIR . 'db.php';
+require_once LIB_DIR . 'auth.php';
+require_once LIB_DIR . 'view.php';
+
+start_session_if_needed();
+
+// Conexión PDO
+$pdo = getPDO();
+
+// Manejar subida de foto de perfil
+$upload_message = "";
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto_perfil']) && !empty($_SESSION['id'])) {
+    $allowed_types = ['image/jpeg', 'image/png'];
+    $max_size = 2 * 1024 * 1024; // 2 MB
+    $file = $_FILES['foto_perfil'];
+    if (in_array($file['type'], $allowed_types) && $file['size'] <= $max_size && $file['error'] == 0) {
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $safeName = intval($_SESSION['id']) . '_' . time() . '.' . $ext;
+        // Asegurarnos que la carpeta exista
+        $targetDir = UPLOADS_DIR . 'media/images/profiles/';
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+        $fullPath = $targetDir . $safeName;
+        // Mover archivo
+        if (move_uploaded_file($file['tmp_name'], $fullPath)) {
+            // Guardar sólo el nombre relativo en DB (ej. profiles/123_..png)
+            $relative = 'media/images/profiles/' . $safeName;
+            $stmt = $pdo->prepare("UPDATE usuarios SET foto_perfil = ? WHERE id = ?");
+            $stmt->execute([$relative, $_SESSION['id']]);
+            $upload_message = "Foto subida correctamente.";
+        } else {
+            $upload_message = "Error al intentar subir la foto.";
+        }
+    } else {
+        $upload_message = "Archivo inválido (solo JPG/PNG, máx. 2MB)";
+    }
+}
+// Obtener gastos del último mes
+$gastos = [];
+$stmt = $pdo->prepare("SELECT categoria, monto, fecha, descripcion FROM gastos WHERE fecha >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 1 MONTH) AND fecha < DATE_FORMAT(NOW(), '%Y-%m-01')");
+$stmt->execute();
+$gastos = $stmt->fetch() ?: [
+    'categoria'=>'NA',
+    'monto'=>0,
+    'fecha'=>'01/01/1990',
+    'descripcion'=>'NA'
+];
+// Obtener informacion del condominio
+$stmt = $pdo->prepare("SELECT nombre, numero_casas, cuota_mensual FROM condominio_info WHERE id = 1");
+$stmt->execute();
+$condominio = $stmt->fetch() ?: [
+    'nombre' => 'Condominio sin nombre',
+    'numero_casas' => 0,
+    'cuota_mensual' => 0
+];
+
+// Renderizar layout
+render('cuenta', ['condominio' => $condominio, 'upload_message' => $upload_message, 'gastos'=> $gastos]);
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\brains\home.brain.php'
+FILE CONTENT:{
+<?php
+require_once LIB_DIR . 'db.php';
+require_once LIB_DIR . 'auth.php';
+require_once LIB_DIR . 'view.php';
+
+start_session_if_needed();
+
+// Conexión PDO
+$pdo = getPDO();
+
+// Obtener información del condominio
+$stmt = $pdo->prepare("SELECT nombre, numero_casas, cuota_mensual FROM condominio_info WHERE id = 1");
+$stmt->execute();
+$condominio = $stmt->fetch() ?: [
+    'nombre' => 'Condominio sin nombre',
+    'numero_casas' => 0,
+    'cuota_mensual' => 0
+];
+
+// Obtener informacion de gastos del ultimo mes
+$gastos = [];
+$stmt = $pdo->prepare("SELECT categoria, monto, fecha, descripcion FROM gastos WHERE fecha >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 1 MONTH) AND fecha < DATE_FORMAT(NOW(), '%Y-%m-01')");
+$stmt->execute();
+$gastos = $stmt->fetchAll() ?: null;
+// Contar usuarios registrados (safe)
+$totalUsuarios = 0;
+try {
+    $totalUsuarios = (int)$pdo->query("SELECT COUNT(*) FROM usuarios")->fetchColumn();
+} catch (Exception $e) {
+    // en producción no exponer detalles
+    $totalUsuarios = 0;
+}
+
+// Datos a enviar al layout
+$data = [
+    'condominio'     => $condominio,
+    'gastos'         => $gastos,
+    'totalUsuarios'  => $totalUsuarios,
+    'title' => 'Dashboard',
+    'fecha'          => date('d/m/Y'),
+];
+// ... (tu código existente)
+$stmt = DB::queryPrepared("SELECT categoria, monto, fecha FROM gastos ORDER BY fecha DESC LIMIT 9");
+$gastos = $stmt->fetchAll();
+// Renderizar layout
+render('home', $data);
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\brains\login.brain.php'
+FILE CONTENT:{
+<?php
+require_once LIB_DIR . 'db.php';
+require_once LIB_DIR . 'auth.php';
+require_once LIB_DIR . 'view.php';
+
+start_session_if_needed();
+
+// si POST -> procesar login mínimo (esto es ejemplo, ajustar según tu auth)
+$errors = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = filter_input(INPUT_POST, 'email', FILTER_VALIDATE_EMAIL);
+    $password = $_POST['password'] ?? '';
+
+    if ($email && $password) {
+        $pdo = getPDO();
+        $stmt = $pdo->prepare("SELECT id, password FROM usuarios WHERE email = ? LIMIT 1");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+        if ($user && password_verify($password, $user['password'])) {
+            $_SESSION['id'] = $user['id'];
+            header('Location: ' . APP_URL . '/');
+            exit;
+        } else {
+            $errors[] = "Credenciales inválidas.";
+        }
+    } else {
+        $errors[] = "Email y contraseña requeridos.";
+    }
+}
+
+// Renderizar layout 'login'
+render('login', ['errors' => $errors]);
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\brains\set-theme.brain.php'
+FILE CONTENT:{
+<?php
+// brains/set-theme.brain.php
+require_once LIB_DIR . 'auth.php';
+start_session_if_needed();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['theme'])) {
+    // limpiar input: solo alfanum, guion y guion bajo
+    $theme = preg_replace('/[^a-zA-Z0-9\-\_]/', '', $_POST['theme']);
+    if ($theme) {
+        $_SESSION['theme'] = $theme;
+    }
+}
+
+// redirección segura
+$redirect = $_SERVER['HTTP_REFERER'] ?? APP_URL . '/';
+header("Location: $redirect");
+exit;
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\brains\test.brain.php'
+FILE CONTENT:{
+<?php
+require_once LIB_DIR . 'db.php';
+require_once LIB_DIR . 'view.php';
+
+$pdo = getPDO();
+$total = $pdo->query("SELECT COUNT(*) FROM usuarios")->fetchColumn();
+
+render('test', ['total' => $total]);
+
+}
+=== FILE END ===
+
+[DIR]: 'app\layouts'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\404.layout.php'
+FILE CONTENT:{
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Página no encontrada - 404</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{background:#111;color:#ddd;font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding:40px;}
+    a{color:#9fd3ff}
+  </style>
+</head>
+<body>
+  <h1>Error 404</h1>
+  <p>La ruta <strong><?= e($route) ?></strong> no existe en el sistema.</p>
+  <p>Ruta base: <?= e(APP_URL) ?></p>
+  <p><a href="<?= e(APP_URL) ?>/">Volver al inicio</a></p>
+</body>
+</html>
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\cuenta.layout.php'
+FILE CONTENT:{
+<?php
+require_once LIB_DIR.'db.php';
+require_once LIB_DIR.'auth.php';
+require_once LIB_DIR.'view.php';
+
+start_session_if_needed();
+
+// Conexión PDO
+$pdo = getPDO();
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\home.layout.php'
+FILE CONTENT:{
+<!-- Cabeza de Página -->
+<?php start_session_if_needed();
+ include PARTIALS_DIR.'header.php';// cabeza de página?>  
+<?php include PARTIALS_DIR .'navbar.php';// helpers sidebars o navbars?> 
+
+<!-- Incluye partials/header/navbar -->
+<div class="container mt-5">
+  <h1><?php echo $title; ?> - Bienvenido <?php echo $_SESSION['user']['nombre'] ?? 'Admin'; ?>!</h1>
+  
+  <!-- Cards Gastos (Bootstrap Masonry-like) -->
+  <div class="row g-4 py-5 row-cols-1 row-cols-md-2 row-cols-lg-3">
+  <?php if ($gastos===null): ?>
+    <div class="col-12"><p class="text-center">No hay gastos registrados. ¡<?php echo $_SESSION['user']['nombre'] ?? 'Admin'; ?>!, agrega uno!</p></div>
+  <?php endif; ?>
+    <?php if($gastos!=null)foreach ($gastos as $gasto): ?>
+      <div class="col">
+        <div class="card h-100 shadow hover-shadow">
+          <div class="card-body text-center">
+            <h5 class="card-title"><?php echo htmlspecialchars($gasto['categoria']); ?></h5>
+            <p class="display-6 fw-bold">$<?php echo number_format($gasto['monto'], 2); ?></p>
+            <small class="text-muted"><?php echo date('d/m/Y', strtotime($gasto['fecha'])); ?></small>
+          </div>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  
+  <!-- Próximo: Chart.js aquí -->
+</div>
+<!-- partials/footer -->
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\login.layout.php'
+FILE CONTENT:{
+<?php include PARTIALS_DIR . 'header.php'; ?>
+<?php include PARTIALS_DIR . 'navbar.php'; ?>
+
+<div class="container" style="margin-top:120px;">
+  <div class="row justify-content-center">
+    <div class="col-md-5">
+      <h3>Iniciar sesión</h3>
+      <?php if (!empty($errors)): ?>
+        <div class="alert alert-danger">
+          <?php foreach($errors as $err) echo '<div>' . e($err) . '</div>'; ?>
+        </div>
+      <?php endif; ?>
+      <form method="POST" action="<?= e(APP_URL) ?>/login">
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input id="email" class="form-control input-te" name="email" type="email" required>
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Contraseña</label>
+          <input id="password" class="form-control input-te" name="password" type="password" required>
+        </div>
+        <button class="btn btn-te btn-te-primary" type="submit">Entrar</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<?php include PARTIALS_DIR . 'footer.php'; ?>
+}
+=== FILE END ===
+
+[DIR]: 'app\layouts\partials'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\partials\footer.php'
+FILE CONTENT:{
+<!-- layouts/partials/footer.php -->
+<footer class="footer mt-5 py-3 text-center">
+  <div class="container">
+    <small><?= e(APP_NAME) ?> © <?= date('Y') ?> — Sistema Administrador Condominial</small>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\partials\header.php'
+FILE CONTENT:{
+<?php
+// layouts/partials/header.php
+require_once LIB_DIR .'/auth.php';
+start_session_if_needed();
+
+// Tema: session or default
+$theme = $_SESSION['theme'] ?? (defined('APP_THEME') ? APP_THEME : 'deepnote-light');
+$theme = preg_replace('/[^a-z0-9\-\_]/i', '', $theme);
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><?= htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8') ?><?= isset($pageTitle) ? " - $pageTitle" : '' ?></title>
+
+  <!-- Bootstrap y fuentes -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Estilos globales (usar URLs, no paths de servidor) -->
+  <link rel="stylesheet" href="<?= CSS_URL ?>/base.css">
+  <link rel="stylesheet" href="<?= CSS_URL ?>/styles.css">
+
+  <!-- Tema dinámico: si tienes archivos en public/css/themes/theme-<slug>.css -->
+  <?php
+    $themeFilePath = THEMES_DIR . '/theme-' . $theme . '.css';
+    if (file_exists($themeFilePath)) {
+        echo '<link id="theme-css" rel="stylesheet" href="' . THEMES_URL . '/theme-' . htmlspecialchars($theme) . '.css">';
+    } else {
+        // fallback: el tema puede ser aplicado vía clase en body (styles.css contiene .dark-theme)
+        echo '<link id="theme-css" rel="stylesheet" href="">';
+    }
+  ?>
+
+  <script>
+    // Exponer APP_URL al client JS
+    window.APP_URL = "<?= htmlspecialchars(APP_URL, ENT_QUOTES, 'UTF-8') ?>";
+    window.__INITIAL_THEME__ = "<?= htmlspecialchars($theme, ENT_QUOTES, 'UTF-8') ?>";
+  </script>
+
+  <script defer src="<?= JS_URL ?>/theme.js"></script>
+</head>
+<body class="<?= $theme === 'deepnote-dark' || $theme === 'oscuro' ? 'dark-theme' : '' ?>">
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\partials\navbar.php'
+FILE CONTENT:{
+<?php
+// layouts/partials/navbar.php
+// start_session_if_needed(); // ya lo hace header
+$logged = is_logged_in();
+?>
+<nav class="navbar navbar-expand-lg navbar-dark fixed-top bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="<?= APP_URL ?>/">🏡 Condominio</a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item"><a class="nav-link" href="<?= APP_URL ?>/cuenta">Mi cuenta</a></li>
+        <li class="nav-item"><a class="nav-link" href="<?= APP_URL ?>/login">Login</a></li>
+      </ul>
+      <!-- Selector de tema: al cambiar, se envía POST a /set-theme -->
+      <form method="POST" action="<?= APP_URL ?>/set-theme" class="ms-3 d-flex align-items-center">
+        <select name="theme" id="theme-select" class="form-select" onchange="this.form.submit()">
+        <?php
+            if(isset ($_SESSION['theme'])){
+              switch ($_SESSION['theme']){
+                case 'deepnote-light':
+                  echo "<option value='deepnote-light' selected>☀️ Deepnote Light</option>";
+                  echo "<option value='deepnote-dark'>🌙 Deepnote Dark</option>";
+                  echo "<option value='blue'>💠 Azul</option>";
+                  echo "<option value='green'>🌿 Verde</option>";
+                  break;
+                case 'deepnote-dark':
+                  echo "<option value='deepnote-light'>☀️ Deepnote Light</option>";
+                  echo "<option value='deepnote-dark' selected>🌙 Deepnote Dark</option>";
+                  echo "<option value='blue'>💠 Azul</option>";
+                  echo "<option value='green'>🌿 Verde</option>";
+                  break;
+                case 'blue':
+                  echo "<option value='deepnote-light'>☀️ Deepnote Light</option>";
+                  echo "<option value='deepnote-dark'>🌙 Deepnote Dark</option>";
+                  echo "<option value='blue' selected>💠 Azul</option>";
+                  echo "<option value='green'>🌿 Verde</option>";
+                  break;
+                case 'green':
+                  echo "<option value='deepnote-light'>☀️ Deepnote Light</option>";
+                  echo "<option value='deepnote-dark'>🌙 Deepnote Dark</option>";
+                  echo "<option value='blue'>💠 Azul</option>";
+                  echo "<option value='green' selected>🌿 Verde</option>";
+                  break;
+                default: 
+                  echo "<option value='deepnote-light'>☀️ Deepnote Light</option>";
+                  echo "<option value='deepnote-dark'>🌙 Deepnote Dark</option>";
+                  echo "<option value='blue'>💠 Azul</option>";
+                  echo "<option value='green'>🌿 Verde</option>";
+              }
+            }
+          ?>
+        </select>
+      </form>
+    </div>
+  </div>
+</nav>
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\layouts\test.layout.php'
+FILE CONTENT:{
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Página de prueba</title>
+</head>
+<body style="background-color:#222; color:#eee; font-family:JetBrains Mono, monospace;">
+  <h1>Conexión exitosa</h1>
+  <p>Total de usuarios registrados: <?= e($total) ?></p>
+</body>
+</html>
+}
+=== FILE END ===
+
+[DIR]: 'app\lib'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\lib\auth.php'
+FILE CONTENT:{
+<?php
+require_once LIB_DIR.'/db.php';
+
+// =================================
+// MANEJO DE SESIONES Y AUTENTICACIÓN
+// =================================
+function start_session_if_needed(): void {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+}
+
+function is_logged_in(): bool {
+    return isset($_SESSION['id']);
+}
+    
+function current_user(): ?array {
+    if (!is_logged_in()) return null;
+    $pdo = getPDO();
+    $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE id = ?");
+    $stmt->execute([$_SESSION['id']]);
+    return $stmt->fetch();
+}
+
+function require_login(): void {
+    if (!is_logged_in()) {
+        header("Location: " . APP_URL . "/login");
+        exit;
+    }
+}
+
+function require_role(array $roles): void {
+    $user = current_user();
+    if (!$user || !in_array($user['rol'], $roles)) {
+        http_response_code(403);
+        echo "<h1>Acceso denegado</h1>";
+        exit;
+    }
+}
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\lib\db.php'
+FILE CONTENT:{
+<?php
+// app/lib/db.php - Conexión PDO segura (ruta a config corregida)
+require_once __DIR__ . '/../../config.php'; // subimos dos niveles desde app/lib hasta la raíz del proyecto
+
+// Clase DB (singleton) + helper getPDO
+class DB {
+    private static $instance = null;
+    private $pdo;
+
+    private function __construct() {
+        try {
+            $this->pdo = new PDO(
+                'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+                DB_USER,
+                DB_PASS,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
+            );
+        } catch (PDOException $e) {
+            error_log('DB Connection Error: ' . $e->getMessage());
+            // Mostrar mensaje genérico (evitar exponer detalles en producción)
+            if (defined('APP_ENV') && APP_ENV === 'local') {
+                die('Error de conexión a la base de datos: ' . $e->getMessage());
+            } else {
+                die('Error de conexión a la base de datos.');
+            }
+        }
+    }
+
+    public static function getInstance() {
+        if (!self::$instance) self::$instance = new DB();
+        return self::$instance->pdo;
+    }
+
+    // Helper para prepared queries
+    public static function queryPrepared($sql, $params = []) {
+        $stmt = self::getInstance()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    }
+}
+
+// Función procedural que algunos archivos llaman
+function getPDO(): PDO {
+    return DB::getInstance();
+}
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\app\lib\view.php'
+FILE CONTENT:{
+<?php
+// view.php - motor de vistas seguro y minimalista
+// Evitar requires a LIB_DIR dentro de render; confiar en que index.php/brains ya cargaron lo necesario
+
+if (!defined('ROOT_DIR')) {
+    // Intentar cargar config si no está cargada (fallback)
+    if (file_exists(__DIR__ . '/../../config.php')) {
+        require_once __DIR__ . '/../../config.php';
+    } else {
+        // No se puede continuar sin config
+        http_response_code(500);
+        echo "Configuración no encontrada.";
+        exit;
+    }
+}
+else{require_once ROOT_DIR.'/config.php';   }
+// Función de escape (si no existe)
+if (!function_exists('e')) {
+    function e($value): string {
+        return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+}
+
+/**
+ * render: incluye un layout seguro
+ * @param string $layout Nombre del layout (sin extension). Solo admite [a-zA-Z0-9_-]
+ * @param array $data Variables a pasar a la vista
+ */
+function render(string $layout, array $data = []): void {
+    // Sanitizar layout: solo permitir un slug simple (no ../ ni subdirectorios)
+    $layout = preg_replace('/[^a-zA-Z0-9_\-]/', '', $layout);
+    if ($layout === '') {
+        http_response_code(400);
+        echo "Layout inválido.";
+        return;
+    }
+
+    // Construir ruta absoluta al archivo de layout
+    $layoutFile = rtrim(LAYOUTS_DIR, '/\\') . DIRECTORY_SEPARATOR . $layout . '.layout.php';
+
+    // Seguridad: evitar cualquier intento de incluir fuera de layouts
+    $realLayoutsDir = realpath(rtrim(LAYOUTS_DIR, '/\\'));
+    $realLayoutFile = file_exists($layoutFile) ? realpath($layoutFile) : false;
+    if (!$realLayoutFile || strpos($realLayoutFile, $realLayoutsDir) !== 0) {
+        // Mostrar error amigable
+        if (defined('APP_ENV') && APP_ENV === 'local') {
+            // detalle en local
+            http_response_code(404);
+            echo "<h1>Layout no encontrado</h1>";
+            echo "<p>Buscando: " . e($layoutFile) . "</p>";
+        } else {
+            http_response_code(404);
+            echo "<h1>Página no encontrada</h1>";
+        }
+        return;
+    }
+
+    // Hacer disponible APP globalmente dentro de layouts
+    $app = [
+        'name' => APP_NAME,
+        'url' => APP_URL,
+        'public_url' => PUBLIC_URL,
+        'css_url' => CSS_URL,
+        'js_url' => JS_URL,
+        'uploads_url' => UPLOADS_URL,
+        'theme' => $_SESSION['theme'] ?? APP_THEME
+    ];
+
+    // Extraer variables seguras
+    extract($data, EXTR_SKIP);
+
+    // Incluir el layout (ya que el archivo fue verificado)
+    include $realLayoutFile;
+}
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\condominio.code-workspace'
+FILE CONTENT:{
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"sqltools.connections": [
+			{
+				"mysqlOptions": {
+					"authProtocol": "default"
+				},
+				"previewLimit": 50,
+				"server": "localhost",
+				"port": 3306,
+				"driver": "MariaDB",
+				"name": "localDB",
+				"database": "condominio_cienega",
+				"username": "root",
+				"password": ""
+			}
+		]
+	}
+}
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\config.php'
+FILE CONTENT:{
+<?php
+// config.php - configuración global (mejorada para local y producción)
+require_once 'helpers.php';
+AppDebug("Ésta es una puta prueba","config.php");
+
+// --- 1. Definición de Entorno ---
+// Entorno: 'local' o 'production'
+// Prioridad: 1) Variable de Entorno (ej. en tu hosting), 2) Default a 'local'
+if (!defined('APP_ENV')) {
+    define('APP_ENV', getenv('APP_ENV') ?: 'local');
+}
+
+// Rutas del filesystem (siempre con / final donde corresponda)
+define('ROOT_DIR', rtrim(__DIR__, '/\\'));         // carpeta raíz del proyecto
+
+// --- 2. Carga de Credenciales Segura desde JSON ---
+$CredFile = ROOT_DIR . '/lp65.json'; //archivo de credenciales de base de datos
+$dbConfig = null;
+
+if (file_exists($CredFile)) {
+    $CredFile_Content = file_get_contents($CredFile);
+    $allConfig = json_decode($CredFile_Content, true); // true para array asociativo
+
+    if (json_last_error() === JSON_ERROR_NONE) {
+        // Verificar si la configuración para el entorno actual (APP_ENV) existe
+        if (isset($allConfig[APP_ENV])) {
+            $dbConfig = $allConfig[APP_ENV];
+        } else {
+            // El JSON es válido, pero falta la clave para este entorno
+            die('Error: No se encontró la configuración de base de datos para el entorno "' . APP_ENV . '" en ' . $CredFile);
+        }
+    } else {
+        // El archivo JSON está mal formado
+        die('Error: El archivo de credenciales JSON (' . $CredFile . ') tiene un formato incorrecto. Verifique la sintaxis.');
+    }
+} else {
+    // No se encontró el archivo
+    die('Error: No se encuentra el archivo de credenciales: ' . $CredFile . '.');
+}
+// --- Fin de lectura de credenciales de bases de datos ---
+
+
+// --- 3. Definición de Constantes de DB (desde JSON) ---
+// Usar los valores del JSON.
+// Se mantiene getenv() como un 'override' opcional si la variable de entorno existe
+if ($dbConfig) {
+    define('DB_HOST', getenv('DB_HOST') ?: $dbConfig['DB_HOST']);
+    define('DB_NAME', getenv('DB_NAME') ?: $dbConfig['DB_NAME']);
+    define('DB_USER', getenv('DB_USER') ?: $dbConfig['DB_USER']);
+    define('DB_PASS', getenv('DB_PASS') ?: $dbConfig['DB_PASS']);
+} else {
+    // Esto no debería ocurrir si las validaciones anteriores funcionan
+    die('Error fatal: $dbConfig no se pudo inicializar.');
+}
+
+
+// --- 4. Resto de tu Configuración (Rutas, URLs, Opciones) ---
+// (Esta parte se mantiene igual que tu archivo original)
+
+// Rutas del filesystem
+define('APP_DIR', ROOT_DIR . '/app/');
+define('LIB_DIR', APP_DIR . '/lib/');
+define('BRAINS_DIR', APP_DIR . '/brains/');
+define('LAYOUTS_DIR', APP_DIR . '/layouts/');
+define('PARTIALS_DIR', LAYOUTS_DIR . '/partials/');
+define('PUBLIC_DIR', ROOT_DIR . '/public/');
+define('UPLOADS_DIR', PUBLIC_DIR . '/uploads/');
+define('CSS_DIR', PUBLIC_DIR . '/css/');
+define('JS_DIR', PUBLIC_DIR . '/js/');
+define('THEMES_DIR', PUBLIC_DIR . '/css/themes/');
+
+// Opciones
+define('APP_NAME', getenv('APP_NAME') ?: 'Condominio Ciénega');
+define('APP_VERSION', 'v2.0-Rev1.0');
+define('APP_THEME', getenv('APP_THEME') ?: 'deepnote-light');
+
+if(!isset($_SESSION['theme'])){
+    $_SESSION['theme'] = getenv('APP_THEME')?: 'blue';
+}
+
+// Construcción de URLs base
+if (!defined('APP_URL')) {
+    if (php_sapi_name() !== 'cli' && isset($_SERVER['HTTP_HOST'])) {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME']);
+        $base = preg_replace('#/public(/index\.php)?$#', '', dirname($script));
+        $base = ($base === '/' || $base === '\\') ? '' : rtrim($base, '/');
+        define('APP_URL', rtrim($protocol . '://' . $_SERVER['HTTP_HOST'] . $base, '/'));
+    } else {
+        define('APP_URL', 'http://localhost/condominio');
+    }
+}
+
+// URLs útiles
+define('PUBLIC_URL', APP_URL . '/public');
+define('CSS_URL', PUBLIC_URL . '/css');
+define('JS_URL', PUBLIC_URL . '/js');
+define('UPLOADS_URL', PUBLIC_URL . '/uploads');
+define('THEMES_URL', PUBLIC_URL . '/css/themes');
+
+// Timezone y dev settings
+date_default_timezone_set(getenv('APP_TZ') ?: 'America/Mexico_City');
+if (APP_ENV === 'local') {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
+    ini_set('display_errors', '0');
+}
+?>
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\helpers.php'
+FILE CONTENT:{
+<!-- Helpers File -->
+<!-- Contains all the functions that may be needed for php handling -->
+<?php
+// 
+function AppDebug(string $dbgmsg,string $area): bool  {
+    // Debug File path.
+$AppDebugFile = __DIR__.'/AppDebug.txt';
+    // Debug line to add.
+$dbgline= '['.date('d/m/Y h:i:s', filemtime($AppDebugFile)).']->'.$dbgmsg.' '.'Caller:'.$area."\n";
+
+if(file_exists($AppDebugFile)){
+    try{
+    file_put_contents($AppDebugFile, $dbgline, FILE_APPEND);
+    }catch(Exception $e){
+        return false; // not possible to write contents to file.
+    }
+} else{
+    try{
+            file_put_contents($AppDebugFile,'' , LOCK_EX); //Create File if not created yet
+            file_put_contents($AppDebugFile, $dbgline, FILE_APPEND);
+    }catch(Exception $e){
+        return false; //error File not created
+    }
+}
+return true;
+}
+?>
+
+<?php   
+function a(){
+    return 1;
+}
+?>
+<?php
+function b(){
+    return 1;
+}
+?>
+<?php   
+function c(){
+    return 1;
+}
+?>
+<?php   
+function d(){
+    return 1;
+}
+?>
+<?php   
+function e(){
+    return 1;
+}
+?>
+<?php   
+function f(){
+    return 1;
+}
+?>
+<?php   
+function g(){
+    return 1;
+}
+?>
+<?php   
+function h(){
+    return 1;
+}
+?>
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\lp65.json'
+FILE CONTENT:{
+{
+    "local": {
+      "DB_HOST": "localhost",
+      "DB_NAME": "condominio_cienega",
+      "DB_USER": "root",
+      "DB_PASS": ""
+    },
+    "production": {
+      "DB_HOST": "sql203.infinityfree.com",
+      "DB_NAME": "if0_36879919_db_activation",
+      "DB_USER": "if0_36879919",
+      "DB_PASS": "Chespirito2"
+    }
+  }
+}
+=== FILE END ===
+
+[DIR]: 'public'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\.htaccess'
+FILE CONTENT:{
+RewriteEngine On
+
+RewriteBase /condominio/public/
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\Box.js'
+FILE CONTENT:{
+  const box = document.getElementById("box");
+  let dragging = false;
+  let MouseX = 0, MouseY = 0;
+  let posX = 0, posY = 0;
+
+  box.addEventListener("mousedown", e => {
+    dragging = true;
+    box.classList.add("dragging");
+    MouseX = e.movementX;
+    MouseY = e.movementY;
+  });
+
+  document.addEventListener("mouseup", () => {
+    dragging = false;
+    box.classList.remove("dragging");
+  });
+
+  document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    posX = e.pageX - offsetX;
+    posY = e.pageY - offsetY;
+  });
+
+  // actualización suave con el motor gráfico
+  function update() {
+    box.style.transform = `translate(${posX}px, ${posY}px)`;
+    requestAnimationFrame(update); // se ejecuta antes de repintar la pantalla (~60fps)
+  }
+  update();
+}
+=== FILE END ===
+
+[DIR]: 'public\api'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\api\theme-updates.php'
+FILE CONTENT:{
+<?php
+header('Content-Type: text/event-stream');
+header('Cache-Control: no-cache');
+
+require_once __DIR__ . '/../../config.php';
+require_once LIB_DIR . 'db.php';
+
+// Obtener $pdo
+$pdo = getPDO();
+
+while (true) {
+    $stmt = $pdo->prepare('SELECT vars_json FROM themes WHERE active = 1 LIMIT 1');
+    $stmt->execute();
+    $row = $stmt->fetch();
+    $vars = $row['vars_json'] ?? null;
+    echo "data: " . json_encode($vars) . "\n\n";
+    ob_flush();
+    flush();
+    sleep(5);
+}
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\api\theme.php'
+FILE CONTENT:{
+<?php
+header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/../../config.php';
+require_once LIB_DIR . 'db.php';
+
+$pdo = getPDO();
+
+// Recuperar el parámetro 'name' de forma segura sin usar FILTER_SANITIZE_STRING (deprecated).
+// Permitimos sólo letras, números, guiones y guion bajo (whitelist).
+$name = $_GET['name'] ?? '';
+$name = preg_replace('/[^a-zA-Z0-9\-\_]/', '', $name);
+
+// Si no hay nombre válido devolver array vacío
+if ($name === '') {
+    echo json_encode([]);
+    exit;
+}
+
+try {
+    $stmt = $pdo->prepare('SELECT vars_json FROM themes WHERE name = :name LIMIT 1');
+    $stmt->execute(['name' => $name]);
+    $row = $stmt->fetch();
+    // Devolver JSON; si vars_json está en texto JSON, lo devolvemos como objeto; si es nulo, devolvemos []
+    $out = $row['vars_json'] ?? null;
+    if ($out === null || $out === '') {
+        echo json_encode([]);
+    } else {
+        // Si vars_json ya es string JSON guardado en DB, lo devolvemos decodificado para evitar doble-encoding
+        $decoded = json_decode($out, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            echo json_encode($decoded);
+        } else {
+            // Si no es JSON, devolver como string en array
+            echo json_encode(['value' => $out]);
+        }
+    }
+} catch (Exception $e) {
+    // No exponer detalles en producción
+    if (defined('APP_ENV') && APP_ENV === 'local') {
+        echo json_encode(['error' => $e->getMessage()]);
+    } else {
+        echo json_encode([]);
+    }
+}
+?>
+}
+=== FILE END ===
+
+[DIR]: 'public\css'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\base.css'
+FILE CONTENT:{
+:root {
+    --bg-color: #2e2931;
+    --text-color: #333;
+    --accent-color: #007bff;
+    --border-color: #ddd;
+    --hover-color: #0056b3;
+    --button-bg: #007bff;
+    --button-text: #fff;
+    --button-hover-bg: #0056b3;
+    --table-bg: #fff;
+    --table-header-bg: #ddd;
+    --canvas-bg: #fff;
+    --icon-color: #007bff;
+    --link-color: #007bff;
+    --link-hover: #0056b3;
+    --shadow: 0 0 10px rgba(0, 123, 255, 0.1);
+    --font-family: Arial, sans-serif;
+    --font-size-base: 16px;
+    --transition: all 0.2s ease;
+    --media-mobile-padding: 10px;
+    --media-mobile-font: 14px;
+    --alert-success-bg: #d4edda;
+    --alert-success-text: #155724;
+    --input-bg: #fff;
+    --input-border: #ced4da;
+}
+
+body {
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    transition: var(--transition);
+}
+
+.container {
+    max-width: 1200px;
+    padding: 20px;
+}
+
+.btn-primary {
+    background: var(--button-bg);
+    color: var(--button-text);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.btn-primary:hover {
+    background: var(--button-hover-bg);
+    color: var(--button-text);
+}
+
+.table {
+    background: var(--table-bg);
+}
+
+.table th {
+    background: var(--table-header-bg);
+}
+
+canvas {
+    background: var(--canvas-bg);
+    border: 1px solid var(--border-color);
+}
+
+a {
+    color: var(--link-color);
+}
+
+a:hover {
+    color: var(--link-hover);
+}
+
+.alert-success {
+    background: var(--alert-success-bg);
+    color: var(--alert-success-text);
+}
+
+input, select {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    transition: var(--transition);
+}
+
+@media (max-width: 768px) {
+    body {
+        font-size: var(--media-mobile-font);
+    }
+    .container {
+        padding: var(--media-mobile-padding);
+    }
+}
+
+/* Animaciones e íconos */
+.theme-toggle::before {
+    content: "🌓";
+    color: var(--icon-color);
+    transition: var(--transition);
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Más configs para huecos: Forms, Cards (Bootstrap-like), Icons, etc. */
+.card {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+.icon-lock::before {
+    content: "🔒";
+    color: var(--icon-color);
+}
+
+.icon-chart::before {
+    content: "📊";
+    color: var(--icon-color);
+}
+
+/* Extensivo: Cubre más elementos como modals, navbars, footers, etc. */
+.navbar {
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.footer {
+    background: var(--bg-color);
+    color: var(--text-color);
+    border-top: 1px solid var(--border-color);
+}
+
+.modal-content {
+    background: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+/* Hover effects for interactive elements */
+button:hover, a:hover, input:focus {
+    box-shadow: var(--shadow);
+    border-color: var(--hover-color);
+}
+
+
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Fira+Code:wght@400;700&family=Hack:wght@400;700&display=swap');
+
+:root {
+    --bg-color: #fff;
+    --text-color: #000;
+    --accent-color: #007bff;
+    --font: 'JetBrains Mono', 'Fira Code', 'Hack', monospace;
+    --font-alt: 'Fira Code', 'Hack', monospace;
+    --border-color: #ccc;
+    --canvas-bg: #fff;
+    --navbar-bg: #007bff;
+    --navbar-text: #fff;
+    --button-bg: #007bff;
+    --button-text: #fff;
+    --table-bg: #fff;
+    --table-border: #dee2e6;
+    --hover-bg: #0056b3;
+    --shadow: rgba(0,0,0,0.1);
+}
+body { 
+    background: var(--bg-color); 
+    color: var(--text-color); 
+    font-family: var(--font); 
+    transition: all 0.2s ease; 
+}
+.navbar { background: var(--navbar-bg); color: var(--navbar-text); }
+.btn-primary { 
+    background: var(--button-bg); 
+    color: var(--button-text); 
+    border: 1px solid var(--border-color); 
+}
+.btn-primary:hover { background: var(--hover-bg); }
+canvas { background: var(--canvas-bg); } /* Chart.js */
+table { background: var(--table-bg); border: 1px solid var(--table-border); }
+.theme-toggle::before { content: "🌓"; }
+@media (max-width: 768px) { .container { padding: 10px; font-size: 14px; } }
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\styles.css'
+FILE CONTENT:{
+/* css/styles.css */
+body {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 300; /* SemiLight */
+    font-size: 1rem;
+}
+h1, h2, h5 {
+    font-weight: 300;
+}
+.table, .form-control, .btn, .alert {
+    font-family: 'JetBrains Mono', monospace;
+}
+.dark-theme {
+    background-color: #473939;
+    color: #383434;
+}
+.container-dark {
+    background-color: #2c2c2c;
+    border-radius: 10px;
+    padding: 25px;
+}
+.card { 
+  transition: transform 0.2s;
+ } 
+
+.card:hover { 
+  transform: scale(1.05);
+  color: rgba(144, 206, 0, 0.425);
+ }
+
+.card-dark {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 8px;
+}
+.card-header-dark {
+    background-color: #4a4a4a;
+    color: #ffffff;
+}
+.neon-green { background-color: #4cb939; }
+.neon-blue { background-color: #3fa8af; }
+.neon-pink { background-color: #b3477b; }
+.vote-bar {
+    height: 25px;
+    border-radius: 5px;
+    margin-right: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 0.9em;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    animation: slideIn 1s ease-in-out;
+}
+.vote-bar.voted {
+    border: 2px solid #ff9500;
+}
+@keyframes slideIn {
+    from { width: 0; }
+    to { width: inherit; }
+}
+.dates { font-size: 0.8em; color: #bbbbbb; }
+.countdown { font-size: 0.9em; color: #ff4040; }
+.metrics { font-size: 0.9em; color: #bbbbbb; }
+.action-btn { cursor: pointer; margin-right: 10px; }
+.logo-container::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 140px;
+    height: 100px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 70%);
+    z-index: 0;
+    border-radius: 50%;
+}
+.logo-container img {
+    position: relative;
+    z-index: 1;
+}
+
+/* new rules chat gpt */
+
+/* ===============================
+   SISTEMA VISUAL BASE - Condominio
+   =============================== */
+
+   :root {
+    --bg-body: #f5f7fa;
+    --bg-container: #ffffff;
+    --bg-navbar: #2e2931;
+    --color-text: #2d3436;
+    --color-link: #1a73e8;
+    --color-link-hover: #1557b0;
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --radius: 10px;
+    --transition: all 0.3s ease;
+  }
+  
+  /* GENERAL */
+  body {
+    font-family: "JetBrains Mono", monospace;
+    background-color: var(--bg-body);
+    color: var(--color-text);
+    transition: var(--transition);
+  }
+  
+  .container {
+    background-color: var(--bg-container);
+    border-radius: var(--radius);
+    padding: 30px;
+    margin-top: 80px;
+    box-shadow: var(--shadow-soft);
+    transition: var(--transition);
+  }
+  
+  h1, h4 {
+    margin-bottom: 1rem;
+    color: var(--color-text);
+  }
+  
+  a {
+    color: var(--color-link);
+    text-decoration: none;
+    transition: var(--transition);
+  }
+  
+  a:hover {
+    color: var(--color-link-hover);
+  }
+  
+  .navbar {
+    background-color: var(--bg-navbar) !important;
+    box-shadow: var(--shadow-soft);
+  }
+  
+  .footer {
+    opacity: 0.85;
+    font-size: 0.9rem;
+  }
+  
+  .btn {
+    border-radius: var(--radius);
+    transition: var(--transition);
+  }
+  
+}
+=== FILE END ===
+
+[DIR]: 'public\css\themes'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\themes\theme-blue.css'
+FILE CONTENT:{
+/* theme-blue.css
+   Tema azul: paleta fría y corporativa.
+   Incluye utilidades, componentes y animaciones orientadas a una apariencia profesional.
+*/
+
+/* Variables */
+:root {
+    --blue-bg: #f6fbff;
+    --blue-surface: #ffffff;
+    --blue-text: #0b2a4a;
+    --blue-muted: #6b8aa3;
+    --blue-primary: #2563eb;
+    --blue-primary-700: #1e40af;
+    --blue-accent: #0ea5e9;
+    --blue-success: #059669;
+    --blue-warning: #d97706;
+    --blue-danger: #ef4444;
+    --blue-radius: 10px;
+    --blue-shadow: 0 10px 30px rgba(37,99,235,0.08);
+    --blue-transition: 180ms ease;
+  }
+  
+  /* Base */
+  body { background:var(--blue-bg); color:var(--blue-text); font-family:Inter, system-ui, -apple-system; margin:0; }
+  
+  /* Container */
+  .container-blue { max-width:1200px; margin:0 auto; padding:22px; }
+  
+  /* Card */
+  .card-blue { background:var(--blue-surface); padding:14px; border-radius:var(--blue-radius); box-shadow:var(--blue-shadow); transition:transform var(--blue-transition); }
+  .card-blue:hover { transform:translateY(-6px); }
+  
+  /* Buttons */
+  .btn-blue { padding:8px 14px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  .btn-blue-primary { background:var(--blue-primary); color:#fff; border:0; }
+  .btn-blue-ghost { background:transparent; border:1px solid rgba(37,99,235,0.08); color:var(--blue-primary); }
+  
+  /* Inputs */
+  .input-blue { padding:10px 12px; border-radius:8px; border:1px solid #e6f0ff; }
+  
+  /* Badges */
+  .badge-blue { padding:6px 10px; border-radius:999px; background:var(--blue-primary-700); color:#fff; }
+  
+  /* Avatar */
+  .avatar-blue { border-radius:50%; width:48px; height:48px; }
+  
+  /* Grid */
+  .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  
+  /* Utilities x20 */
+  .mt-1 { margin-top:8px } .mb-1 { margin-bottom:8px } .p-1 { padding:8px } .p-2 { padding:12px }
+  .text-muted { color:var(--blue-muted) } .text-primary { color:var(--blue-primary) }
+  .w-100 { width:100% } .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .center { margin-left:auto; margin-right:auto }
+  .flex { display:flex } .flex-center { display:flex; align-items:center; justify-content:center }
+  
+  /* Table */
+  .table-blue { width:100%; border-collapse:collapse; }
+  .table-blue th, .table-blue td { padding:12px; border-bottom:1px solid #eef6ff; }
+  
+  /* Tooltip */
+  .tooltip-blue[data-tip]:hover::after { content:attr(data-tip); position:absolute; background:#0b2440; color:#fff; padding:6px 8px; border-radius:6px; }
+  
+  /* Progress */
+  .progress-blue { background:#eaf4ff; height:10px; border-radius:999px; overflow:hidden; }
+  .progress-blue > i { display:block; width:50%; height:100%; background:linear-gradient(90deg,var(--blue-primary),var(--blue-accent)); }
+  
+  /* Animation: appear */
+  .anim-appear { animation:appear .5s cubic-bezier(.2,.9,.3,1) both; }
+  @keyframes appear { from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none;} }
+  
+  /* Many utility classes to reach 100 rules - mixture of sizes, badges, spacing, alignment, text helpers, color helpers */
+  .size-16 { font-size:16px; } .size-14 { font-size:14px; } .size-12 { font-size:12px; }
+  .rounded { border-radius:var(--blue-radius) } .rounded-sm { border-radius:6px }
+  .box { padding:12px; border-radius:8px; background:linear-gradient(180deg,#fff,#f7fbff) }
+  .shadow-sm { box-shadow:0 6px 18px rgba(171, 184, 209, 0.04) }
+  .bg-soft { background:#f0f7ff }
+  .badge-pill { padding:6px 12px; border-radius:999px }
+  .icon { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; }
+  
+  /* Status */
+  .status-online { background:#10b981; width:10px; height:10px; border-radius:50% }
+  .status-offline { background:#94a3b8; width:10px; height:10px; border-radius:50% }
+  
+  /* Card variants */
+  .card-compact { padding:8px } .card-large { padding:22px }
+  
+  /* Form row */
+  .form-row { display:flex; gap:12px; align-items:center }
+  
+  /* Badge colors */
+  .badge-info { background:var(--blue-accent); color:#021427 } .badge-success { background:var(--blue-success); color:#fff }
+  
+  /* Footer small */
+  .footer-small { font-size:0.85rem; color:var(--blue-muted); padding:24px 0; }
+  
+  /* Spacer helpers */
+  .spacer-4 { height:4px } .spacer-8 { height:8px } .spacer-12 { height:12px }
+  
+  /* End of theme-blue */
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\themes\theme-deepnote-dark.css'
+FILE CONTENT:{
+/* theme-deepnote-dark.css
+   Deepnote Dark: tema oscuro y elegante.
+   - Variables oscuras, contraste para accesibilidad
+   - Mismos componentes que deepnote-light pero adaptados a fondo oscuro
+   - Incluye utilidades y animaciones
+*/
+
+/* =========================
+   Variables oscuras
+   ========================= */
+   :root {
+    --dd-bg: #0b1220;
+    --dd-surface: #0f1724;
+    --dd-panel: #0f1728;
+    --dd-text: #e6eef6;
+    --dd-muted: #94a3b8;
+    --dd-primary: #06b6d4;
+    --dd-primary-700: #0891b2;
+    --dd-accent: #8b5cf6;
+    --dd-success: #16a34a;
+    --dd-warning: #f59e0b;
+    --dd-danger: #ef4444;
+    --dd-radius: 12px;
+    --dd-shadow-sm: 0 8px 24px rgba(2,6,23,0.6);
+    --dd-shadow-md: 0 30px 80px rgba(2,6,23,0.7);
+    --dd-transition: 200ms cubic-bezier(.2,.9,.3,1);
+    --dd-font-mono: "JetBrains Mono", monospace;
+    --dd-font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  
+  /* =========================
+     Base
+     ========================= */
+  html, body { height:100%; }
+  body {
+    margin:0; background:var(--dd-bg); color:var(--dd-text); font-family:var(--dd-font-sans);
+    -webkit-font-smoothing:antialiased; transition:background var(--dd-transition), color var(--dd-transition);
+  }
+  
+  /* container & grid */
+  .dd-container { max-width:1200px; margin:0 auto; padding:22px; }
+  .dd-row { display:flex; gap:18px; flex-wrap:wrap; align-items:stretch; }
+  
+  /* =========================
+     Cards & surfaces
+     ========================= */
+  .dd-card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:var(--dd-radius); padding:18px; box-shadow:var(--dd-shadow-sm); transition: transform var(--dd-transition); }
+  .dd-card:hover { transform:translateY(-8px); box-shadow:var(--dd-shadow-md); }
+  
+  /* =========================
+     Headings & text helpers
+     ========================= */
+  .h-dd-1 { font-size:1.6rem; font-weight:700; margin-bottom:8px; color:var(--dd-text); }
+  .h-dd-2 { font-size:1.2rem; font-weight:600; }
+  
+  /* link */
+  a { color:var(--dd-primary); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  
+  /* =========================
+     Buttons (12)
+     ========================= */
+  .btn-dd { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:10px; border:0; cursor:pointer; transition:all var(--dd-transition); font-weight:600; }
+  .btn-dd-primary { background: linear-gradient(180deg,var(--dd-primary),var(--dd-primary-700)); color: #021427; box-shadow: 0 8px 26px rgba(6,182,212,0.12); }
+  .btn-dd-primary:hover { transform:translateY(-3px); }
+  
+  /* ghost transparent */
+  .btn-dd-ghost { background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--dd-text); }
+  
+  /* icon, small, large */
+  .btn-dd-icon { width:40px; height:40px; justify-content:center; padding:0; }
+  
+  /* disabled */
+  .btn-dd[disabled] { opacity:0.45; cursor:not-allowed; transform:none; }
+  
+  /* =========================
+     Inputs & forms (12)
+     ========================= */
+  .input-dd { width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--dd-text); transition:box-shadow var(--dd-transition), border var(--dd-transition); }
+  .input-dd:focus { outline:none; box-shadow:0 10px 30px rgba(8,145,178,0.06); border-color:var(--dd-primary-700); }
+  
+  /* label */
+  .form-label { color:var(--dd-muted); font-size:0.9rem; }
+  
+  /* helper & error */
+  .form-help { color:var(--dd-muted); font-size:0.85rem; }
+  .form-error { color:var(--dd-danger); font-size:0.85rem; }
+  
+  /* =========================
+     Badges & status (8)
+     ========================= */
+  .badge-dd { display:inline-block; padding:6px 10px; border-radius:999px; font-weight:700; font-size:0.8rem; }
+  .badge-primary { background:var(--dd-primary-700); color:#021427; }
+  .badge-muted { background:rgba(255,255,255,0.06); color:var(--dd-text); }
+  
+  /* status small */
+  .status { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .status-online { background:var(--dd-success); box-shadow:0 0 0 4px rgba(22,163,74,0.06); }
+  
+  /* =========================
+     Table & list (8)
+     ========================= */
+  .table-dd { width:100%; border-collapse:collapse; color:var(--dd-text); }
+  .table-dd th, .table-dd td { padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.02); }
+  .table-dd thead th { background:transparent; opacity:0.9; color:var(--dd-muted); }
+  
+  /* zebra */
+  .table-dd tbody tr:nth-child(even) { background:rgba(255,255,255,0.01); }
+  
+  /* =========================
+     Utilities (20+)
+     ========================= */
+  .mt-1 { margin-top:8px; } .mt-2 { margin-top:12px; } .mt-3 { margin-top:18px; }
+  .mb-1 { margin-bottom:8px; } .mb-2 { margin-bottom:12px; } .mb-3 { margin-bottom:18px; }
+  .p-1 { padding:8px; } .p-2 { padding:12px; }
+  .text-muted { color:var(--dd-muted); }
+  .text-center { text-align:center; }
+  
+  /* flex */
+  .d-flex { display:flex; } .flex-col { display:flex; flex-direction:column; } .items-center { align-items:center; }
+  
+  /* size */
+  .w-100 { width:100%; } .max-w-300 { max-width:300px; }
+  
+  /* shadow */
+  .shadow-inset { box-shadow: inset 0 2px 8px rgba(0,0,0,0.3); }
+  
+  /* border */
+  .border-soft { border:1px solid rgba(255,255,255,0.03); border-radius:var(--dd-radius-sm); }
+  
+  /* truncate */
+  .truncate { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  
+  /* responsive helper */
+  .hide-sm { display:none; }
+  @media(min-width:768px) { .hide-sm { display:block; } }
+  
+  /* =========================
+     Animations (20+ rules)
+     ========================= */
+  .anim-fade { animation:dfade .45s ease both; }
+  @keyframes dfade { from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none;} }
+  
+  .anim-tilt { animation:tilt .9s cubic-bezier(.2,.9,.3,1) both; }
+  @keyframes tilt { from{ transform:rotateX(-8deg) translateY(6px); opacity:0 } to{ transform:none; opacity:1 } }
+  
+  .anim-floating { animation:dfloat 6s ease-in-out infinite; }
+  @keyframes dfloat { 0%{ transform:translateY(0);}50%{ transform:translateY(-8px);}100%{ transform:translateY(0);} }
+  
+  /* spin slow */
+  .anim-spin-slow { animation:spin 2.4s linear infinite; }
+  
+  /* =========================
+     Widgets (20+ rules)
+     ========================= */
+  .card-hero { display:flex; gap:16px; align-items:center; background:linear-gradient(90deg, rgba(137,213,246,0.04), rgba(139,92,246,0.03)); padding:20px; border-radius:16px; }
+  .kpi { display:flex; flex-direction:column; gap:6px; }
+  .kpi .value { font-size:1.6rem; font-weight:700; }
+  
+  /* mini chart wrapper */
+  .sparkline { width:120px; height:36px; }
+  
+  .toast-dd { position:fixed; left:20px; bottom:20px; background:#071022; color:var(--dd-text); padding:12px 16px; border-radius:10px; box-shadow:var(--dd-shadow-md); }
+  
+  /* End of deepnote-dark */
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\themes\theme-deepnote-light.css'
+FILE CONTENT:{
+/* theme-deepnote-light.css
+   Deepnote Light: tema claro, legible y con componentes ricos.
+   - Variables: colores, sombras, radios
+   - Componentes: card, badge, button, forms, table
+   - Utilidades: spacing, display, text helpers
+   - Animaciones y micro-interactions
+   Descripción: diseñado para UI administrativa en modo claro.
+*/
+
+/* =========================
+   Variables y tokens
+   ========================= */
+   :root {
+    --dd-bg: #ffffff;
+    --dd-surface: #fbfdff;
+    --dd-panel: #f1f5f9;
+    --dd-text: #0f172a;
+    --dd-muted: #64748b;
+    --dd-primary: #0ea5e9;
+    --dd-primary-700: #0369a1;
+    --dd-accent: #7c3aed;
+    --dd-success: #16a34a;
+    --dd-warning: #f59e0b;
+    --dd-danger: #dc2626;
+    --dd-radius: 12px;
+    --dd-radius-sm: 8px;
+    --dd-shadow-sm: 0 6px 18px rgba(2,6,23,0.06);
+    --dd-shadow-md: 0 18px 40px rgba(2,6,23,0.08);
+    --dd-transition: 180ms cubic-bezier(.2,.9,.3,1);
+    --dd-font-mono: "JetBrains Mono", monospace;
+    --dd-font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  
+  /* =========================
+     Base & layout
+     ========================= */
+  :root, html, body { height:100%; }
+  body {
+    margin:0;
+    background:var(--dd-bg);
+    color:var(--dd-text);
+    font-family: var(--dd-font-sans);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    transition: background var(--dd-transition), color var(--dd-transition);
+  }
+  
+  /* container */
+  .dd-container { max-width:1200px; margin:0 auto; padding:22px; }
+  
+  /* grid */
+  .dd-row { display:flex; gap:20px; flex-wrap:wrap; align-items:stretch; }
+  .dd-col { flex:1 1 0; min-width:260px; }
+  
+  /* =========================
+     Cards & surfaces (5)
+     ========================= */
+  .dd-card {
+    background:var(--dd-surface);
+    border-radius:var(--dd-radius);
+    box-shadow:var(--dd-shadow-sm);
+    padding:18px;
+    transition: transform var(--dd-transition), box-shadow var(--dd-transition);
+  }
+  .dd-card:hover { transform: translateY(-6px); box-shadow:var(--dd-shadow-md); }
+  
+  .dd-panel { background:var(--dd-panel); border-radius:var(--dd-radius-sm); padding:12px; }
+  
+  /* =========================
+     Headings & text (6)
+     ========================= */
+  .h-dd-1 { font-size:1.6rem; line-height:1.15; margin:0 0 8px; font-weight:600; color:var(--dd-text); }
+  .h-dd-2 { font-size:1.2rem; font-weight:600; margin-bottom:6px; }
+  .text-muted { color:var(--dd-muted); font-size:0.95rem; }
+  
+  /* =========================
+     Buttons (12)
+     ========================= */
+  .btn-dd { display:inline-flex; align-items:center; gap:10px; padding:8px 14px; border-radius:10px; border:0; cursor:pointer; transition:all var(--dd-transition); font-weight:600; }
+  .btn-dd:focus { outline: 3px solid rgba(14,165,233,0.12); outline-offset:2px; }
+  
+  /* primary */
+  .btn-dd-primary { background:linear-gradient(180deg,var(--dd-primary),var(--dd-primary-700)); color:#fff; box-shadow: 0 6px 18px rgba(14,165,233,0.12); }
+  .btn-dd-primary:hover { transform:translateY(-3px); }
+  
+  /* ghost */ 
+  .btn-dd-ghost { background:transparent; border:1px solid rgba(2,6,23,0.06); color:var(--dd-text); }
+  
+  /* small and large */
+  .btn-dd-sm { padding:6px 10px; border-radius:8px; font-size:0.9rem; }
+  .btn-dd-lg { padding:12px 18px; border-radius:12px; font-size:1rem; }
+  
+  /* icon button */
+  .btn-dd-icon { padding:8px; width:40px; height:40px; justify-content:center; }
+  
+  /* =========================
+     Badges & Labels (8)
+     ========================= */
+  .badge-dd { display:inline-block; padding:6px 10px; border-radius:999px; font-weight:700; font-size:0.8rem; color:#fff; }
+  .badge-primary { background:var(--dd-primary-700); }
+  .badge-accent { background:var(--dd-accent); }
+  .badge-success { background:var(--dd-success); color:#fff; }
+  .badge-warning { background:var(--dd-warning); color:#111; }
+  .badge-danger { background:var(--dd-danger); }
+  
+  /* pill variant */
+  .badge-pill { border-radius:999px; padding:4px 12px; }
+  
+  /* =========================
+     Avatars (6)
+     ========================= */
+  .avatar-dd { width:48px; height:48px; border-radius:50%; object-fit:cover; display:inline-block; }
+  .avatar-sm { width:32px; height:32px; }
+  
+  /* avatar ring */
+  .avatar-ring { box-shadow: 0 0 0 4px rgba(14,165,233,0.06); border-radius:50%; }
+  
+  /* =========================
+     Forms (12)
+     ========================= */
+  .input-dd {
+    width:100%;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid #e6eef6;
+    background:#fff;
+    transition:box-shadow var(--dd-transition), border var(--dd-transition);
+    font-size:0.95rem;
+  }
+  .input-dd:focus { box-shadow: 0 10px 26px rgba(14,165,233,0.06); border-color:var(--dd-primary-700); outline:none; }
+  
+  /* textarea */
+  .textarea-dd { min-height:120px; resize:vertical; }
+  
+  /* inline form row */
+  .form-row { display:flex; gap:12px; align-items:center; }
+  
+  /* form-help, error */
+  .form-help { font-size:0.85rem; color:var(--dd-muted); }
+  .form-error { color:var(--dd-danger); font-size:0.85rem; }
+  
+  /* =========================
+     Tables (8)
+     ========================= */
+  .table-dd { width:100%; border-collapse:collapse; font-size:0.95rem; }
+  .table-dd th, .table-dd td { padding:12px 14px; border-bottom:1px solid #eef5fb; text-align:left; }
+  .table-dd thead th { background:linear-gradient(180deg,#fbfdff,#f3f7fb); font-weight:700; }
+  
+  /* zebra */
+  .table-dd tbody tr:nth-child(odd) { background:#fff; }
+  .table-dd tbody tr:nth-child(even) { background:#fbfdff; }
+  
+  /* =========================
+     Lists & menus (8)
+     ========================= */
+  .list-dd { list-style:none; margin:0; padding:0; }
+  .list-dd li { padding:10px 0; border-bottom:1px dashed rgba(2,6,23,0.03); }
+  
+  /* menu item */
+  .menu-item { display:flex; align-items:center; gap:12px; padding:10px; border-radius:8px; transition:background var(--dd-transition); }
+  .menu-item:hover { background:rgba(14,165,233,0.03); }
+  
+  /* =========================
+     Tiny utilities (20+ rules)
+     ========================= */
+  .mt-1 { margin-top:8px; } .mt-2 { margin-top:12px; } .mt-3 { margin-top:18px; }
+  .mb-1 { margin-bottom:8px; } .mb-2 { margin-bottom:12px; } .mb-3 { margin-bottom:18px; }
+  .p-1 { padding:8px; } .p-2 { padding:12px; } .p-3 { padding:18px; }
+  .text-center { text-align:center; } .text-right { text-align:right; }
+  .d-block { display:block; } .d-inline { display:inline; } .d-flex { display:flex; }
+  .flex-col { display:flex; flex-direction:column; } .items-center { align-items:center; }
+  .justify-between { justify-content:space-between; }
+  
+  /* width utilities */
+  .w-25 { width:25%; } .w-50 { width:50%; } .w-75 { width:75%; } .w-100 { width:100%; }
+  
+  /* overflow */
+  .overflow-hidden { overflow:hidden; } .truncate { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  
+  /* shadow utilities */
+  .shadow-sm { box-shadow:var(--dd-shadow-sm); } .shadow-md { box-shadow:var(--dd-shadow-md); }
+  
+  /* rounded */
+  .rounded { border-radius:var(--dd-radius); } .rounded-sm { border-radius:var(--dd-radius-sm); }
+  
+  /* =========================
+     Bad UX protections (a11y, focus)
+     ========================= */
+  a:focus, button:focus, input:focus { outline: 3px solid rgba(14,165,233,0.10); outline-offset:2px; }
+  
+  /* =========================
+     Icons pseudo elements (small set)
+     ========================= */
+  .icon { display:inline-block; width:28px; height:28px; border-radius:6px; background:rgba(2,6,23,0.04); text-align:center; line-height:28px; font-weight:700; color:var(--dd-primary-700); }
+  .icon-sm { width:22px; height:22px; line-height:22px; }
+  
+  /* =========================
+     Animations (20+ rules)
+     ========================= */
+  /* fade */
+  .anim-fade { animation:fade .45s ease both; }
+  @keyframes fade { from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none;} }
+  
+  /* slide-up */
+  .anim-up { animation:up .6s cubic-bezier(.2,.9,.3,1) both; }
+  @keyframes up { from{ transform:translateY(12px); opacity:0;} to{ transform:none; opacity:1;} }
+  
+  /* pulse small */
+  .anim-pulse { animation:pulse 2s infinite; }
+  @keyframes pulse { 0%{ transform:scale(1);}50%{ transform:scale(1.02);}100%{ transform:scale(1);} }
+  
+  /* spin */
+  .anim-spin { animation:spin 1s linear infinite; }
+  @keyframes spin { from{ transform:rotate(0);} to{ transform:rotate(360deg);} }
+  
+  /* bounce */
+  .anim-bounce { animation:bounce 800ms cubic-bezier(.2,.9,.3,1); }
+  @keyframes bounce { 0%{ transform:translateY(12px); opacity:0;} 60%{ transform:translateY(-6px); opacity:1;} 100%{ transform:translateY(0);} }
+  
+  /* stagger utility */
+  .stagger > * { opacity:0; transform:translateY(8px); animation:staggerIn .5s forwards; }
+  .stagger > *:nth-child(1){ animation-delay:.04s } .stagger > *:nth-child(2){ animation-delay:.08s } .stagger > *:nth-child(3){ animation-delay:.12s }
+  @keyframes staggerIn { to { opacity:1; transform:none } }
+  
+  /* =========================
+     Misc / widgets (20+ rules)
+     ========================= */
+  /* progress */
+  .progress-dd { background:#eef6fb; height:10px; border-radius:999px; overflow:hidden; }
+  .progress-dd > i { display:block; height:100%; background:linear-gradient(90deg,var(--dd-primary),var(--dd-accent)); width:40%; transition:width 600ms ease; }
+  
+  /* toast */
+  .toast-dd { position:fixed; right:20px; bottom:20px; background:var(--dd-text); color:#fff; padding:10px 14px; border-radius:8px; box-shadow:var(--dd-shadow-md); }
+  
+  /* tooltip */
+  .tooltip-dd { position:relative; }
+  .tooltip-dd[data-tip]:hover::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:#0b1220; color:#fff; padding:6px 10px; border-radius:6px; font-size:0.85rem; white-space:nowrap; }
+  
+  /* helper: visually-hidden */
+  .sr-only { position:absolute !important; width:1px !important; height:1px !important; padding:0 !important; margin:-1px !important; overflow:hidden !important; clip:rect(0,0,0,0) !important; white-space:nowrap !important; border:0 !important; }
+  
+  /* color helpers */
+  .text-primary { color:var(--dd-primary-700) !important; }
+  .bg-primary { background:var(--dd-primary) !important; color:#fff !important; }
+  
+  /* end of deepnote-light theme */
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\themes\theme-green.css'
+FILE CONTENT:{
+/* theme-green.css
+   Tema green: naturaleza / sostenible.
+   - Verde dominante, tonos neutrales y utilidades.
+*/
+
+/* Variables */
+:root {
+    --g-bg: #f6fff9;
+    --g-surface: #ffffff;
+    --g-text: #05201a;
+    --g-muted: #396b66;
+    --g-primary: #16a34a;
+    --g-accent: #059669;
+    --g-success: #16a34a;
+    --g-warning: #f97316;
+    --g-danger: #dc2626;
+    --g-radius: 10px;
+    --g-shadow: 0 8px 26px rgba(6,95,70,0.06);
+    --g-transition: 180ms ease;
+  }
+  
+  /* Base */
+  body { background:var(--g-bg); color:var(--g-text); font-family:Inter, system-ui; margin:0; }
+  
+  /* Container */
+  .container-g { max-width:1200px; margin:0 auto; padding:20px; }
+  
+  /* Card */
+  .card-g { background:var(--g-surface); border-radius:var(--g-radius); padding:16px; box-shadow:var(--g-shadow); }
+  
+  /* Buttons */
+  .btn-g { padding:8px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  .btn-g-primary { background:var(--g-primary); color:#02140b; }
+  
+  /* Inputs */
+  .input-g { padding:10px; border-radius:8px; border:1px solid #eaf7ef; }
+  
+  /* Badges */
+  .badge-g { padding:6px 10px; border-radius:999px; background:var(--g-accent); color:#02140b; }
+  
+  /* Utilities many */
+  .mt-1 { margin-top:8px } .mb-1 { margin-bottom:8px } .p-1 { padding:8px } .p-2 { padding:12px }
+  .d-flex { display:flex } .flex-col { display:flex; flex-direction:column } .items-center { align-items:center }
+  .text-muted { color:var(--g-muted) } .text-primary { color:var(--g-primary) }
+  
+  /* List */
+  .list-g { list-style:none; margin:0; padding:0; } .list-g li { padding:10px 0; border-bottom:1px solid #eef8f2 }
+  
+  /* Table */
+  .table-g { width:100%; border-collapse:collapse } .table-g th, .table-g td { padding:12px; border-bottom:1px solid #eef8f2 }
+  
+  /* Tooltip */
+  .tooltip-g[data-tip]:hover::after { content:attr(data-tip); position:absolute; background:#05201a; color:#fff; padding:6px 8px; border-radius:6px; }
+  
+  /* Progress */
+  .progress-g { background:#eefaf1; height:10px; border-radius:999px; overflow:hidden } .progress-g > i { display:block; height:100%; width:55%; background:linear-gradient(90deg,var(--g-primary),var(--g-accent)); }
+  
+  /* Animation minor */
+  .anim-g { animation:gappear .55s cubic-bezier(.2,.9,.3,1) both } @keyframes gappear { from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+  
+  /* Avatar */
+  .avatar-g { width:48px; height:48px; border-radius:50%; }
+  
+  /* Badge small */
+  .badge-small { padding:4px 8px; font-size:0.8rem; }
+  
+  /* Status & indicators */
+  .indicator { display:inline-block; padding:6px 8px; border-radius:8px; background:#ecfdf5; color:var(--g-primary); }
+  
+  /* Utility color helpers */
+  .bg-soft { background:#f0fff7 } .bg-muted { background:#f6f9f8 }
+  
+  /* Footer */
+  .footer-g { font-size:0.85rem; color:var(--g-muted); padding:18px 0 }
+  
+  /* Very many helpers to reach requested coverage (spacing, alignments, display etc.) */
+  .w-100 { width:100% } .max-w-300 { max-width:300px } .truncate { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .rounded { border-radius:var(--g-radius) } .shadow { box-shadow:var(--g-shadow) }
+  .center { margin-left:auto; margin-right:auto } .text-center { text-align:center }
+  
+  /* End of theme-green */
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\css\themes\themes-extended.css'
+FILE CONTENT:{
+/* theme-extended.css
+   Tema extendido: utilidades, badges, iconos, animaciones y helpers.
+   Contiene muchas reglas útiles para prototipado y estilo.
+   NOTA: este archivo es un "kit" de reglas. Adáptalo según tus necesidades.
+*/
+
+/* Variables base */
+:root {
+    --te-bg: #ffffff;
+    --te-surface: #f7f9fc;
+    --te-text: #111827;
+    --te-muted: #6b7280;
+    --te-primary: #1d4ed8;
+    --te-accent: #06b6d4;
+    --te-success: #16a34a;
+    --te-danger: #dc2626;
+    --te-warning: #f59e0b;
+    --te-radius: 10px;
+    --te-shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --te-shadow-md: 0 8px 24px rgba(0,0,0,0.12);
+    --te-transition: 200ms cubic-bezier(.4,0,.2,1);
+    --te-font-mono: "JetBrains Mono", monospace;
+    --te-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  
+  /* Reset básico */
+  .te-reset { margin:0; padding:0; box-sizing:border-box; }
+  
+  /* Layout helpers */
+  .te-container { max-width:1200px; margin:0 auto; padding:24px; }
+  .te-row { display:flex; gap:16px; align-items:stretch; flex-wrap:wrap; }
+  .te-col { flex:1 1 0; min-width:220px; }
+  
+  /* Cards y surfaces (4 reglas) */
+  .te-card { background:var(--te-surface); border-radius:var(--te-radius); box-shadow:var(--te-shadow-sm); padding:18px; transition:transform var(--te-transition), box-shadow var(--te-transition); }
+  .te-card:hover { transform:translateY(-6px); box-shadow:var(--te-shadow-md); }
+  .te-surface { background:var(--te-surface); border-radius:8px; padding:12px; }
+  
+  /* Headings & text (6 reglas) */
+  .te-h1 { font-size:1.6rem; font-weight:600; color:var(--te-text); margin-bottom:8px; }
+  .te-h2 { font-size:1.25rem; font-weight:500; color:var(--te-text); }
+  .te-lead { color:var(--te-muted); font-size:0.95rem; }
+  
+  /* Buttons (8 reglas) */
+  .btn-te { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:8px; border:0; cursor:pointer; transition:all var(--te-transition); font-weight:600; }
+  .btn-te-primary { background:var(--te-primary); color:#fff; }
+  .btn-te-primary:hover { filter:brightness(.95); transform:translateY(-2px); }
+  .btn-te-ghost { background:transparent; border:1px solid rgba(0,0,0,0.06); color:var(--te-text); }
+  
+  /* Badges (6 reglas) */
+  .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:0.8rem; font-weight:700; color:#fff; }
+  .badge-success { background:var(--te-success); }
+  .badge-danger { background:var(--te-danger); }
+  .badge-warning { background:var(--te-warning); color:#111; }
+  .badge-muted { background:#94a3b8; }
+  
+  /* Icons helpers (6 reglas) */
+  .icon { display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(0,0,0,0.04); }
+  .icon-lg { width:40px; height:40px; border-radius:8px; }
+  
+  /* Utility spacing (8 reglas) */
+  .mt-1 { margin-top:8px; } .mt-2 { margin-top:12px; } .mb-1 { margin-bottom:8px; } .mb-2 { margin-bottom:12px; }
+  .p-1 { padding:8px; } .p-2 { padding:12px; } .px-2 { padding-left:12px; padding-right:12px; }
+  
+  /* Grid small utilities (6 reglas) */
+  .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  
+  /* Form controls (8 reglas) */
+  .input-te { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #e6edf3; background:#fff; transition:border var(--te-transition); }
+  .input-te:focus { outline:none; border-color:var(--te-accent); box-shadow:0 6px 20px rgba(6,182,212,0.08); }
+  
+  /* Tables (6 reglas) */
+  .table-te { width:100%; border-collapse:collapse; }
+  .table-te th { text-align:left; padding:10px; background:#f1f5f9; font-weight:700; }
+  .table-te td { padding:12px; border-top:1px solid #e6edf3; }
+  
+  /* Avatars (6 reglas) */
+  .avatar { width:48px; height:48px; border-radius:50%; object-fit:cover; }
+  .avatar-sm { width:32px; height:32px; }
+  
+  /* Tooltips (4 reglas) */
+  .tooltip { position:relative; }
+  .tooltip[data-tip]:hover::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:6px 10px; border-radius:6px; font-size:0.8rem; white-space:nowrap; }
+  
+  /* Progress / meters (6 reglas) */
+  .progress { background:#e6edf3; height:10px; border-radius:10px; overflow:hidden; }
+  .progress > i { display:block; height:100%; background:linear-gradient(90deg,var(--te-primary),var(--te-accent)); width:40%; transition:width 600ms cubic-bezier(.4,0,.2,1); }
+  
+  /* Cards media (6 reglas) */
+  .media-card { display:flex; gap:12px; align-items:center; }
+  .media-card .meta { font-size:0.85rem; color:var(--te-muted); }
+  
+  /* Tiny badges / status (6 reglas) */
+  .status { display:inline-block; width:10px; height:10px; border-radius:50%; }
+  .status-online { background:var(--te-success); box-shadow:0 0 0 4px rgba(22,163,74,0.08); }
+  .status-offline { background:#a1a1aa; }
+  
+  /* -------------- Animaciones (20+ reglas) -------------- */
+  /* Fade In */
+  .anim-fade-in { animation:fadeIn .6s ease both; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:none; } }
+  
+  /* Slide Up */
+  .anim-slide-up { animation:slideUp .7s cubic-bezier(.22,.9,.32,1) both; }
+  @keyframes slideUp { from { transform:translateY(20px); opacity:0 } to { transform:none; opacity:1 } }
+  
+  /* Pulse */
+  .anim-pulse { animation:pulse 2s infinite; }
+  @keyframes pulse { 0% { transform:scale(1); } 50% { transform:scale(1.02); } 100% { transform:scale(1);} }
+  
+  /* Wiggle */
+  .anim-wiggle { animation:wiggle 800ms ease; }
+  @keyframes wiggle { 0%{ transform:rotate(-2deg);}50%{ transform:rotate(2deg);}100%{transform:rotate(0);} }
+  
+  /* Floating */
+  .anim-floating { animation:floating 6s ease-in-out infinite; }
+  @keyframes floating { 0%{ transform:translateY(0);}50%{ transform:translateY(-8px);}100%{ transform:translateY(0);} }
+  
+  /* Bounce In */
+  .anim-bounce-in { animation:bounceIn .8s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes bounceIn { 0% { transform:scale(.8); opacity:0;} 60%{ transform:scale(1.04); opacity:1;}100%{transform:scale(1);} }
+  
+  /* Rotate */
+  .anim-rotate { animation:rotateIn .9s ease both; }
+  @keyframes rotateIn { from { transform:rotate(-10deg) scale(.95); opacity:0 } to { transform:none; opacity:1 } }
+  
+  /* Flip */
+  .anim-flip { animation:flipIn .7s ease both; transform-origin:center; }
+  @keyframes flipIn { from { transform:rotateX(-90deg); opacity:0} to { transform:none; opacity:1} }
+  
+  /* Stagger utility (apply to children) */
+  .stagger > * { opacity:0; transform:translateY(8px); animation:staggerIn .6s forwards; }
+  .stagger > *:nth-child(1){ animation-delay:.05s } .stagger > *:nth-child(2){ animation-delay:.10s } .stagger > *:nth-child(3){ animation-delay:.15s }
+  /* ... puedes añadir más nth-child para más elementos */
+  @keyframes staggerIn { to { opacity:1; transform:none } }
+  
+  /* -------------- Badges e indicadores visuales (12 reglas) -------------- */
+  .kpi { display:flex; align-items:center; gap:12px; }
+  .kpi .value { font-size:1.5rem; font-weight:700; }
+  .kpi .label { color:var(--te-muted); font-size:0.85rem; }
+  
+  /* Mini progress / sparkline wrapper */
+  .sparkline { width:100px; height:32px; }
+  
+  /* Toasts (4 reglas) */
+  .toast { position:fixed; right:20px; bottom:20px; background: #0f172a; color:#fff; padding:12px 16px; border-radius:8px; box-shadow:var(--te-shadow-md); }
+  
+  /* -------------- Utilities extra (20 reglas) -------------- */
+  .rounded { border-radius:var(--te-radius); }
+  .rounded-sm { border-radius:6px; }
+  .text-muted { color:var(--te-muted); }
+  .text-primary { color:var(--te-primary); }
+  .flex-center { display:flex; align-items:center; justify-content:center; }
+  .flex-col { display:flex; flex-direction:column; }
+  .hidden { display:none !important; }
+  .show { display:block !important; }
+  .center { margin-left:auto; margin-right:auto; }
+  .shadow-sm { box-shadow:var(--te-shadow-sm); }
+  .shadow-md { box-shadow:var(--te-shadow-md); }
+  .border { border:1px solid #e6edf3; }
+  .border-0 { border:0; }
+  
+  /* Icon fallbacks usando pseudo-elementos (ejemplos simples) */
+  .icon-star::before { content: "★"; color:gold; }
+  .icon-check::before { content: "✔"; color:var(--te-success); }
+  .icon-alert::before { content: "⚠"; color:var(--te-warning); }
+  
+  /* Voice of design system: small helper classes for text overflow */
+  .truncate { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  
+  /* End of theme-extended (más utilidades pueden añadirse) */
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\export_estructura.php'
+FILE CONTENT:{
+<?php
+/**
+ * export_estructura.php
+ * Genera un archivo de texto con toda la estructura y contenido del proyecto,
+ * incluyendo metadatos técnicos, estructura visual de carpetas y hash de integridad.
+ * Compatible con UTF-8 y legible por humanos y AIs.
+ */
+
+mb_internal_encoding("UTF-8");
+mb_http_output("UTF-8");
+
+// Si la consola de Windows está en CP850 o 1252, esta línea ayuda:
+ini_set('default_charset', 'UTF-8');
+
+// CONFIGURACIÓN
+$rootDir = dirname(__DIR__); // carpeta /condominio
+$outputFile = $rootDir.'/estructura_compilada.txt';
+
+// extensiones a incluir
+$allowedExtensions = ['php','scss','map','min','rtl', 'css', 'js', 'html', 'htaccess','txt','ini',''];
+
+// extensiones a excluir
+$blockedExtensions = ['png','jpg','jpeg','gif',''];
+
+// archivos a excluir del mapa
+$ExcludeFiles4Map = [
+                    'estructura_compilada.txt'
+                    ];
+// carpetas a excluir del mapa
+$ExcludeFolders4Map = [
+    ];
+
+// delimitadores de bloque (para lectura mía posterior)
+$delimStart = "\n=== FILE START ===";
+$delimEnd   = "\n=== FILE END ===";
+
+// ENCABEZADO DE METADATOS
+$metadata = "=== METADATOS DE EXPORTACIÓN ===\n";
+$metadata .= "Proyecto: CONDOMINIO PHP/MySQL APP\n";
+$metadata .= "Versión de exportador: 1.3\n";
+$metadata .= "Fecha de generación: " . date('d/M/Y H:i:s') . "\n";
+$metadata .= "Zona horaria: " . date_default_timezone_get() . "\n";
+$metadata .= "Codificación: UTF-8\n";
+$metadata .= "Versión PHP: " . phpversion() . "\n";
+$metadata .= "Carpeta raíz: {$rootDir}\n";
+$metadata .= "Autor del exportador: Carlos E. Ornelas\n";
+$metadata .= "=================================\n\n";
+
+// línea justo antes de escribir el archivo principal:
+file_put_contents($outputFile, $metadata, LOCK_EX);
+
+file_put_contents($outputFile, "=== ESTRUCTURA DEL PROYECTO 'CONDOMINIO' ===\n", FILE_APPEND);
+
+// -----------------------------------------------------------------------------
+// FUNCIÓN 1: genera el árbol de carpetas bonito con íconos 📁📄
+// -----------------------------------------------------------------------------
+function buildFullTreeWithIcons($dir, $prefix = '') {
+    $items = array_diff(scandir($dir), ['.', '..']);
+    $tree = '';
+    $count = count($items);
+    $i = 0;
+
+    foreach ($items as $item) {
+        $i++;
+        $isLast = ($i === $count);
+        $connector = $isLast ? '└── ' : '├── ';
+        $path = $dir . DIRECTORY_SEPARATOR . $item;
+
+        if (is_dir($path)) {
+            // Iconos por nombre de carpeta
+            switch (strtolower($item)) {
+                case 'brains': $icon = '🧠'; break;
+                case 'layouts': $icon = '🗺️'; break;
+                case 'partials': $icon = '🧩'; break;
+                case 'assets': $icon = '📦'; break;
+                case 'views': $icon = '🎭'; break;
+                case 'uploads': $icon = '📂'; break;
+                default: $icon = '📁'; break;
+            }
+
+            $tree .= $prefix . $connector . $icon . " $item/\n";
+            $newPrefix = $prefix . ($isLast ? '    ' : '│   ');
+            $tree .= buildFullTreeWithIcons($path, $newPrefix);
+        } else {
+            // Archivos
+            $ext = strtolower(pathinfo($item, PATHINFO_EXTENSION));
+
+            // Iconos según tipo de archivo
+            if (empty($ext)) {
+                $icon = '❓'; // archivo sin extensión
+            } else {
+                switch ($ext) {
+                    // Código
+                    case 'php': $icon = '🐘'; break;
+                    case 'js': $icon = '⚡'; break;
+                    case 'html': $icon = '🌐'; break;
+                    case 'css': $icon = '🎨'; break;
+                    case 'ini': $icon = '⚙️'; break;
+                    case 'htaccess': $icon = '🔒'; break;
+
+                    // Imágenes
+                    case 'png': case 'jpg': case 'jpeg': case 'gif': $icon = '🖼️'; break;
+
+                    // Multimedia
+                    case 'mp3': $icon = '🎵'; break;
+                    case 'wav': case 'wma': $icon = '🎶'; break;
+                    case 'mp4': case 'avi': case 'wmv': $icon = '🎬'; break;
+
+                    // Documentos
+                    case 'pdf': $icon = '📕'; break;
+                    case 'doc': case 'docx': $icon = '📄'; break;
+                    case 'xls': case 'xlsx': $icon = '📊'; break;
+                    case 'ppt': case 'pptx': $icon = '📈'; break;
+
+                    // Archivos comprimidos
+                    case 'zip': case 'rar': case '7z': $icon = '🗜️'; break;
+
+                    // Config / Entorno
+                    case 'env': $icon = '🧪'; break;
+
+                    // Ejecutables / librerías
+                    case 'exe': $icon = '💻'; break;
+                    case 'dll': $icon = '🧩'; break;
+
+                    default: $icon = '📄'; break;
+                }
+            }
+
+            $tree .= $prefix . $connector . $icon . " $item\n";
+        }
+    }
+
+    return $tree;
+}
+
+// Root folder con icono y barra
+$rootName = basename($rootDir) ?: 'ROOT_FOLDER';
+$rootIcon = '🏠';
+file_put_contents($outputFile, "=== ESTRUCTURA DE CARPETAS ===\n$rootIcon $rootName/\n", FILE_APPEND);
+
+// Generar todo el árbol sin exclusiones
+$treeStructure = buildFullTreeWithIcons($rootDir);
+file_put_contents($outputFile, $treeStructure, FILE_APPEND);
+
+
+
+
+
+
+// función recursiva
+function exportDirectory($_dir, $_base, $blockedExtensions,$_ExcludeFiles4Map, $_delimStart, $_delimEnd, $_outputFile) {
+    $items = array_diff(scandir($_dir),['.', '..']);
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $path = $_dir . DIRECTORY_SEPARATOR . $item;
+        if (is_dir($path)) {
+            file_put_contents($_outputFile, "\n[DIR]: '" . str_replace($_base . DIRECTORY_SEPARATOR, '', $path)."'\n",FILE_APPEND);
+            exportDirectory($path, $_base, $blockedExtensions, $_ExcludeFiles4Map, $_delimStart, $_delimEnd, $_outputFile);
+        } else {
+            
+            $ext = pathinfo($path, PATHINFO_EXTENSION);
+            if (!in_array($ext, $blockedExtensions) && !in_array($item, $_ExcludeFiles4Map)) {
+                $relativePath = str_replace($_base . DIRECTORY_SEPARATOR, '', "$path");
+                $content = file_get_contents($path);
+                $block  = "{$_delimStart}\nFILE PATH: '{$path}'\nFILE CONTENT:{\n{$content}\n}{$_delimEnd}\n";
+                file_put_contents($_outputFile, $block, FILE_APPEND);
+            }
+        }
+    }
+}
+
+file_put_contents($outputFile, "\n=== CONTENIDO DE ARCHIVOS ===", FILE_APPEND);
+exportDirectory($rootDir, $rootDir, $blockedExtensions, $ExcludeFiles4Map, $delimStart, $delimEnd, $outputFile);
+// ESTADÍSTICAS Y EPÍLOGO
+function countFilesByExtension($dir, &$count) {
+    $items = scandir($dir);
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $path = $dir . DIRECTORY_SEPARATOR . $item;
+        if (is_dir($path)) {
+            countFilesByExtension($path, $count);
+        } else {
+            $ext = pathinfo($path, PATHINFO_EXTENSION);
+            $count[$ext ?: 'sin extensión'] = ($count[$ext ?: 'sin extensión'] ?? 0) + 1;
+        }
+    }
+}
+
+$stats = [];
+countFilesByExtension($rootDir, $stats);
+
+$totalFiles = array_sum($stats);
+$totalLines = 0;
+$totalSize = 0;
+
+$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($rootDir));
+foreach ($iterator as $file) {
+    if ($file->isFile()) {
+        $totalLines += count(file($file->getPathname(), FILE_SKIP_EMPTY_LINES));
+        $totalSize += $file->getSize();
+    }
+}
+
+// EPÍLOGO
+$epilogo  = "\n=== ESTADÍSTICAS DEL PROYECTO ===\n";
+$epilogo .= "Archivos analizados: {$totalFiles}\n";
+foreach ($stats as $ext => $num) {
+    $epilogo .= " - {$ext}: {$num}\n";
+}
+$epilogo .= "Líneas totales de código: {$totalLines}\n";
+$epilogo .= "Tamaño total del proyecto: " . round($totalSize / 1024, 2) . " KB\n";
+$epilogo .= "Última modificación global: " . date('d/M/Y H:i:s', filemtime($outputFile)) . "\n";
+$epilogo .= "Hash de integridad (MD5): " . md5_file($outputFile) . "\n";
+$epilogo .= "Versión del proyecto: v1.0-Rev1.1\n";
+$epilogo .= "Tipo de estructura: MVC Modular Dinámico\n";
+$epilogo .= "Formato compatible con AI: ChatGPT/Grok Structural Map v1\n";
+$epilogo .= "=================================\n";
+$epilogo .= "Estructura generada automáticamente por el Arquitecto 🧠 en: " . date('d/M/Y H:i:s') . "\n";
+
+// ===============================
+//  EXTENSIÓN v1.4 - METADATOS AVANZADOS
+// ===============================
+$startTime = $_SERVER["REQUEST_TIME_FLOAT"] ?? microtime(true);
+$endTime = microtime(true);
+$execTime = round($endTime - $startTime, 4);
+
+// --- SHA-256 global ---
+$sha256 = hash_file('sha256', $outputFile);
+
+// --- Dependencias PHP ---
+function findDependencies($dir) {
+    $deps = [];
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir));
+    foreach ($files as $file) {
+        if ($file->isFile() && pathinfo($file->getFilename(), PATHINFO_EXTENSION) === 'php') {
+            $content = file_get_contents($file->getPathname());
+            preg_match_all('/\b(include|require)(_once)?\s*\(?[\'"]([^\'"]+)/i', $content, $matches);
+            if (!empty($matches[3])) {
+                $deps[$file->getPathname()] = array_unique($matches[3]);
+            }
+        }
+    }
+    return $deps;
+}
+$dependencies = findDependencies($rootDir);
+
+// --- Checksums individuales ---
+function fileHashes($dir) {
+    $hashes = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir));
+    foreach ($it as $file) {
+        if ($file->isFile()) {
+            $hashes[str_replace($dir . DIRECTORY_SEPARATOR, '', $file->getPathname())] = sha1_file($file->getPathname());
+        }
+    }
+    return $hashes;
+}
+$fileHashes = fileHashes($rootDir);
+// --- Mapa MVC Avanzado ------ 
+
+// --- Mapa MVC extendido (brains ↔ layouts ↔ libs + diagnóstico) ---
+function mapMVCExtended($_Dir) {
+    $map = [];
+    $brains = glob($_Dir . '/brains/*.php');
+
+    // lista de layouts y partials
+    $layoutsList = [];
+    foreach (glob($_Dir . '/layouts/*.php') as $l) { $layoutsList[] = basename($l); }
+    foreach (glob($_Dir . '/layouts/partials/*.php') as $l) { $layoutsList[] = 'partials/' . basename($l); }
+
+    // lista de libs
+    $libsList = [];
+    foreach (glob($_Dir . '/lib/*.php') as $l) { $libsList[] = basename($l); }
+
+    // contentos de router/htaccess (pistas)
+    $indexPath = $_Dir . '/public/index.php';
+    $htaccessPath = $_Dir . '/public/.htaccess';
+    $indexContent = file_exists($indexPath) ? file_get_contents($indexPath) : '';
+    $htaccessContent = file_exists($htaccessPath) ? file_get_contents($htaccessPath) : '';
+
+    // helpers
+    $extractRenders = function($content) {
+        $found = [];
+        if (preg_match_all("/render\s*\(\s*['\"]([a-zA-Z0-9_\-\/]+)['\"]/i", $content, $m)) {
+            foreach ($m[1] as $r) $found[] = $r;
+        }
+        // detectar render dinámico (render($page))
+        if (preg_match("/render\s*\(\s*\$[a-zA-Z0-9_]+\s*\)/i", $content)) {
+            $found[] = '<<dynamic render>>';
+        }
+        return array_unique($found);
+    };
+
+    $extractIncludes = function($content) {
+        $matches = [];
+        preg_match_all('/\b(include|require)(_once)?\s*\(?\s*[\'"]([^\'"]+)[\'"]/i', $content, $m);
+        if (!empty($m[3])) return array_values(array_unique($m[3]));
+        return [];
+    };
+
+    $extractAssets = function($content) {
+        $assets = ['css' => [], 'js' => []];
+        if (preg_match_all('/<link[^>]+href=[\'"]([^\'"]+\.css)[\'"]/i', $content, $m)) {
+            foreach ($m[1] as $url) $assets['css'][] = $url;
+        }
+        if (preg_match_all('/<script[^>]+src=[\'"]([^\'"]+\.js)[\'"]/i', $content, $m2)) {
+            foreach ($m2[1] as $url) $assets['js'][] = $url;
+        }
+        return $assets;
+    };
+
+    foreach ($brains as $brainPath) {
+        $brainName = basename($brainPath);                 // cuenta.brain.php
+        $slug = preg_replace('/\.brain\.php$/', '', $brainName); // "cuenta"
+        $brainContent = file_get_contents($brainPath);
+
+        // inferir layout: preferencia a llamadas render('name'), si no usar convención slug
+        $renderCalls = $extractRenders($brainContent);
+        $expectedLayoutBase = (count($renderCalls) && $renderCalls[0] !== '<<dynamic render>>') ? $renderCalls[0] : $slug;
+        $expectedLayoutName = $expectedLayoutBase . '.layout.php';
+        $expectedLayoutPath = $_Dir . '/layouts/' . $expectedLayoutName;
+        $layoutExists = file_exists($expectedLayoutPath);
+
+        // alternativas heurísticas (layouts que contienen el slug)
+        $layoutAlternatives = [];
+        if (!$layoutExists) {
+            foreach ($layoutsList as $l) {
+                if (stripos($l, $slug) !== false) $layoutAlternatives[] = $l;
+            }
+        }
+
+        // secuencia esperada y encontrada (heurística)
+        $expectedSequence = [
+            "[REQUEST: /{$slug}]",
+            "[ServerRouting: .htaccess -> public/index.php]",
+            "[Router: public/index.php -> calcula route]",
+            "[Brain: brains/{$brainName}]",
+            "[Includes/libs: lib/*.php]",
+            "[Layout: layouts/{$expectedLayoutName}]",
+            "[Renderer: lib/view.php]"
+        ];
+
+        $foundSequence = [];
+        // routing hints
+        $foundSequence[] = file_exists($htaccessPath) ? "[ServerRouting: public/.htaccess]" : "[ServerRouting: none]";
+        $foundSequence[] = file_exists($indexPath) ? "[Router: public/index.php]" : "[Router: none]";
+
+        // brain loaded
+        $foundSequence[] = "[Loaded: brains/{$brainName}]";
+
+        // includes/requires detectados
+        $includes = $extractIncludes($brainContent);
+        $includedLibs = [];
+        foreach ($includes as $inc) {
+            $bn = basename($inc);
+            if (in_array($bn, $libsList)) {
+                $includedLibs[] = $bn;
+                $foundSequence[] = "[Include: lib/{$bn}]";
+            } else {
+                $foundSequence[] = "[Include: {$inc}]";
+            }
+        }
+
+        // render calls detectadas en brain
+        if (!empty($renderCalls)) {
+            foreach ($renderCalls as $rname) {
+                if ($rname === '<<dynamic render>>') {
+                    $foundSequence[] = "[Render: dynamic -> layout rule at runtime]";
+                } else {
+                    $foundSequence[] = "[Render call: {$rname} -> layouts/{$rname}.layout.php]";
+                }
+            }
+        } else {
+            // fallback: buscar inclusiones directas de layouts en el brain
+            if (preg_match_all('/include\s+.*layouts[\/\\\\]([a-zA-Z0-9_\-]+)\.php/i', $brainContent, $m2)) {
+                foreach ($m2[1] as $ln) $foundSequence[] = "[Include layout: layouts/{$ln}.php]";
+            }
+        }
+
+        // extraer assets desde layout (si existe) o desde alternativa
+        $assets = ['css' => [], 'js' => []];
+        if ($layoutExists) {
+            $assets = $extractAssets(file_get_contents($expectedLayoutPath));
+        } elseif (!empty($layoutAlternatives)) {
+            $altPath = $_Dir . '/layouts/' . $layoutAlternatives[0];
+            if (file_exists($altPath)) $assets = $extractAssets(file_get_contents($altPath));
+        }
+
+        // decidir status
+        if ($layoutExists) {
+            $status = '[OK]';
+        } else {
+            $status = '[link broken]';
+            if (!empty($layoutAlternatives)) $status .= " [alt: " . implode(',', $layoutAlternatives) . "]";
+            else $status .= " [missing layout]";
+        }
+
+        // verificar secuencia: si hay render explicito que apunta al layout esperado
+        $sequenceOK = false;
+        foreach ($foundSequence as $f) {
+            if (preg_match("/Render call: (.+) -> layouts\/(.+)\.layout\.php/i", $f, $mm)) {
+                if ($mm[2] . '.layout.php' === $expectedLayoutName) $sequenceOK = true;
+            }
+        }
+        if (!$sequenceOK && $layoutExists) {
+            $status = '[sequence broken] ' . $status;
+        }
+
+        // sugerencias automáticas
+        $suggestions = [];
+        if (!$layoutExists) {
+            $suggestions[] = "Crear: /layouts/{$expectedLayoutName}";
+            $suggestions[] = "O actualizar render() en {$brainName} para apuntar a layout existente.";
+        } elseif (strpos($status, 'sequence broken') !== false) {
+            $suggestions[] = "Verificar que el brain use render('". preg_replace('/\.layout\.php$/','',$expectedLayoutName) ."') o incluir layout manualmente.";
+        }
+
+        if (empty($includedLibs)) {
+            $suggestions[] = "Confirmar inclusión de libs recomendadas si aplican: " . implode(', ', $libsList);
+        }
+
+        $map[] = [
+            'slug' => $slug,
+            'brain' => $brainName,
+            'expected_layout' => $expectedLayoutName,
+            'layout_exists' => $layoutExists,
+            'layout_alternatives' => $layoutAlternatives,
+            'found_sequence' => $foundSequence,
+            'expected_sequence' => $expectedSequence,
+            'assets' => $assets,
+            'includes' => $includes,
+            'status' => $status,
+            'suggestions' => $suggestions
+        ];
+    }
+
+    $routingHints = [
+        'index_exists' => file_exists($indexPath),
+        'htaccess_exists' => file_exists($htaccessPath),
+        'index_path' => $indexPath,
+        'htaccess_path' => $htaccessPath
+    ];
+
+    return ['map' => $map, 'routing' => $routingHints, 'layouts' => $layoutsList, 'libs' => $libsList];
+}
+
+// ---- Reemplaza la llamada simple anterior por la versión extendida ----
+$mvcData = mapMVCExtended($rootDir);
+
+// --- anexar la sección detallada del Mapa MVC al bloque $extension ---
+$extension = '';
+$extension .= "\n--- Mapa MVC Diagnóstico Avanzado ---\n";
+foreach ($mvcData['map'] as $row) {
+    $extension .= "\nFLOW: /" . $row['slug'] . "\n";
+    $extension .= " Brain file: brains/" . $row['brain'] . "\n";
+    $extension .= " Expected layout: " . $row['expected_layout'] . "  (exists: " . ($row['layout_exists'] ? 'yes' : 'no') . ")\n";
+    if (!$row['layout_exists'] && !empty($row['layout_alternatives'])) {
+        $extension .= "  Alternatives found: " . implode(', ', $row['layout_alternatives']) . "\n";
+    }
+    $extension .= " Status: " . $row['status'] . "\n";
+    $extension .= " Expected sequence:\n";
+    foreach ($row['expected_sequence'] as $es) $extension .= "   - {$es}\n";
+    $extension .= " Found sequence:\n";
+    foreach ($row['found_sequence'] as $fs) $extension .= "   - {$fs}\n";
+    if (!empty($row['assets']['css']) || !empty($row['assets']['js'])) {
+        $extension .= " Assets referenced in layout:\n";
+        foreach ($row['assets']['css'] as $c) $extension .= "   * CSS: {$c}\n";
+        foreach ($row['assets']['js'] as $j) $extension .= "   * JS:  {$j}\n";
+    }
+    if (!empty($row['includes'])) {         
+        $extension .= " Includes/Requires detected in brain:\n";
+        foreach ($row['includes'] as $inc) $extension .= "   - {$inc}\n";
+    }
+    if (!empty($row['suggestions'])) {
+        $extension .= " Suggestions:\n";
+        foreach ($row['suggestions'] as $s) $extension .= "   - {$s}\n";
+    }
+    $extension .= str_repeat("-", 56) . "\n";
+}
+
+// routing hints
+$extension .= "\n--- Routing Hints ---\n";
+$extension .= " index.php exists: " . ($mvcData['routing']['index_exists'] ? 'yes' : 'no') . "\n";
+$extension .= " public/.htaccess exists: " . ($mvcData['routing']['htaccess_exists'] ? 'yes' : 'no') . "\n";
+if ($mvcData['routing']['htaccess_exists']) {
+    $ht = file_get_contents($mvcData['routing']['htaccess_path']);
+    $preview = implode("\n", array_slice(explode("\n", $ht), 0, 8));
+    $extension .= " .htaccess preview (first lines):\n" . $preview . "\n";
+}
+$extension .= "\n--- Layouts found ---\n";
+$extension .= implode(", ", $mvcData['layouts']) . "\n";
+$extension .= "\n--- Libs found ---\n";
+$extension .= implode(", ", $mvcData['libs']) . "\n";
+$extension .= "\n";
+
+
+//-*---------------------------------------
+
+
+// --- Mapa MVC (brains ↔ layouts ↔ lib) ---
+function mapMVC($_Dir) {
+    $map = [];
+    $brains = glob($_Dir . '/brains/*.php');
+    foreach ($brains as $brain) {
+        $name = basename($brain, '.brain.php');
+        $layout = $_Dir . "/layouts/{$name}.layout.php";
+        $map[] = [
+            'brain' => basename($brain),
+            'layout' => file_exists($layout) ? basename($layout) : '—',
+            'libs' => ['auth.php', 'db.php', 'view.php']
+        ];
+    }
+    return $map;
+}
+$mvcMap = mapMVC($rootDir);
+
+// --- Escribir bloque v1.4 ---
+$extension  = "\n=== METADATOS AVANZADOS v1.4 ===\n";
+$extension .= "Hash global SHA-256: {$sha256}\n";
+$extension .= "Tiempo de ejecución: {$execTime} segundos\n\n";
+
+$extension .= "--- Dependencias PHP detectadas ---\n";
+foreach ($dependencies as $file => $deps) {
+    $extension .= basename($file) . " → [" . implode(', ', $deps) . "]\n";
+}
+
+$extension .= "\n--- Checksums individuales (SHA1) ---\n";
+foreach ($fileHashes as $file => $hash) {
+    $extension .= "{$file}: {$hash}\n";
+}
+
+$extension .= "\n--- Mapa MVC ---\n";
+foreach ($mvcMap as $row) {
+    $extension .= "{$row['brain']} → {$row['layout']} (libs: " . implode(', ', $row['libs']) . ")\n";
+}
+
+$extension .= "=================================\n\n";
+
+file_put_contents($outputFile, $extension, FILE_APPEND);
+
+file_put_contents($outputFile, $epilogo, FILE_APPEND);
+
+file_put_contents($outputFile, "\n\r\n\r=== FIN DE ESTRUCTURA DEL PROYECTO ===\n\r\n\r",FILE_APPEND);
+
+echo "✅ Archivo generado correctamente en: {$outputFile}\n";
+
+}
+=== FILE END ===
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\index.php'
+FILE CONTENT:{
+<?php
+require_once __DIR__ . '/../config.php';
+
+// Cargamos libs centrales (index es front controller)
+require_once LIB_DIR . 'db.php';
+require_once LIB_DIR . 'auth.php';
+require_once LIB_DIR . 'view.php';
+
+start_session_if_needed();
+
+// REQUEST PATH -> obtenemos el request que llegó a index.php
+$requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$requestPath = $requestPath ?? '/';
+
+// Normalizamos barras -> sanitizamos syntaxis de request.
+$requestPath = rtrim(str_replace('\\', '/', $requestPath), '/');
+if ($requestPath === '') $requestPath = '/';
+
+// Determinar base path de la app (parte path de APP_URL)
+$parsedAppUrl = parse_url(APP_URL);
+$appBase = $parsedAppUrl['path'] ?? '';
+$appBase = rtrim(str_replace('\\', '/', $appBase), '/');
+if ($appBase === '') $appBase = '';
+
+// Si la requestPath comienza por appBase, la quitamos
+if ($appBase !== '' && strpos($requestPath, $appBase) === 0) {
+    $route = substr($requestPath, strlen($appBase));
+} else {
+    $route = $requestPath;
+}
+
+// Si la URL contiene /public/ por alguna redirección extra, limpiarla
+$route = preg_replace('#^/public#', '', $route);
+
+// Quitar slash inicial y finales
+$route = trim($route, '/');
+
+// Fallback a home si está vacío
+if ($route === '' || $route === 'index.php') {
+    $route = 'home';
+}
+
+// Mapear algunas rutas comunes si deseas alias
+$special = [
+    'condominio' => 'home',
+];
+
+
+if (array_key_exists($route, $special)) {
+    $route = $special[$route];
+}
+
+// Evitar traversal: permitir solo slugs compuestos de letras, números, guiones y subguiones, y una posible subruta simple
+if (!preg_match('/^[a-zA-Z0-9_\-\/]+$/', $route)) {
+    http_response_code(400);
+    echo "Ruta inválida.";
+    exit;
+}
+
+// Si recibimos algo con subruta (p.ej. condominio/login), tomamos el último segmento como slug -> 'login'
+$segments = explode('/', $route);
+$slug = end($segments);
+$brainPath = BRAINS_DIR . '/' . $slug . '.brain.php';
+
+// Si no existe el brain para el último segmento, verificar si existe exacto con la ruta entera (opcional)
+if (!file_exists($brainPath)) {
+    $brainPathAlt = BRAINS_DIR . '/' . $route . '.brain.php';
+    if (file_exists($brainPathAlt)) {
+        $brainPath = $brainPathAlt;
+    }
+}
+
+// Una vez determinada la ruta del brain, revisamos si existe el archivo concreto
+if (file_exists($brainPath)) {
+    require $brainPath; // Existe: entonces invocamos al brain correspondiente.(start brain)
+} else {
+    http_response_code(404); // No existe: entonces mandamos error 404 
+    render('404', ['route' => $route]); // Renderizamos página de error.
+}
+}
+=== FILE END ===
+
+[DIR]: 'public\js'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\js\theme.js'
+FILE CONTENT:{
+document.addEventListener('DOMContentLoaded', () => {
+    const ThemeSelector = document.getElementById('theme-select');
+    const body = document.body;
+    const stored = localStorage.getItem('theme') || window.__INITIAL_THEME__ || '';
+
+    // Aplicar clase global si corresponde
+    if (stored === 'deepnote-dark' || stored === 'oscuro') {
+        body.classList.add('dark-theme');
+    } else {
+        body.classList.remove('dark-theme');
+    }
+
+    // Si el select existe, al cambiar ya se envía el form (por onchange en HTML).
+    // También guardamos en localStorage y hacemos un POST asíncrono por si se desea:
+    if (ThemeSelector) {
+        ThemeSelector.addEventListener('change', () => {
+            const theme = ThemeSelector.value;
+            localStorage.setItem('theme', theme);
+            if (theme === 'deepnote-dark' || theme === 'oscuro') {
+                body.classList.add('dark-theme');
+            } else {
+                body.classList.remove('dark-theme');
+            }
+            // Enviar por fetch a set-theme (usando APP_URL expuesto en header)
+            const url = (window.APP_URL || '') + '/set-theme';
+            fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'theme=' + encodeURIComponent(theme)
+            }).catch(() => { /* ignore errors */ });
+        });
+    }
+});
+}
+=== FILE END ===
+
+[DIR]: 'public\uploads'
+
+[DIR]: 'public\uploads\media'
+
+[DIR]: 'public\uploads\media\images'
+
+[DIR]: 'public\uploads\media\images\profiles'
+
+=== FILE START ===
+FILE PATH: 'C:\xampp\htdocs\condominio\public\uploads\media\images\profiles\.htaccess'
+FILE CONTENT:{
+# /condominio/UPLOADS/.../profiles/.htaccess
+deny all
+
+}
+=== FILE END ===
+
+[DIR]: 'shared'
+
+=== METADATOS AVANZADOS v1.4 ===
+Hash global SHA-256: b798fb98fd2e23e55131d47f492eb92eb9b2b3b7ecdfa9a7327100156409a936
+Tiempo de ejecución: 0.051 segundos
+
+--- Dependencias PHP detectadas ---
+config.php → [helpers.php]
+
+--- Checksums individuales (SHA1) ---
+.htaccess: d0201685d264948bed9c381c3fe138368933a085
+app\brains\cuenta.brain.php: 1bfd0cf41fbfe6845c72d36068075e1d03c8fe9a
+app\brains\home.brain.php: e9a2303d3691dd12aefb8dd921ba6981f85b1c9c
+app\brains\login.brain.php: aac6b30adea7fb5bec6d676f6921ec8f6a4d0fad
+app\brains\set-theme.brain.php: 9ece85d7641837adc18d94148e4edbc3b9a6434a
+app\brains\test.brain.php: ed7e497133a4391e72c6717fc7dab3a8f7f431d3
+app\layouts\404.layout.php: 429203eba2660a5542d4d99071eab9699acb4142
+app\layouts\cuenta.layout.php: d14bb3798c5191dcafaa7ac6f3297bcdc30b5e90
+app\layouts\home.layout.php: d217da5862c49a195e400efc1d1c3f8fa9895ddb
+app\layouts\login.layout.php: 6cc49b01d779baef4ed36b9463b90d566e0db1e4
+app\layouts\partials\footer.php: 97c9c54f9579b1efdcc3dc75da95b51e82a49bac
+app\layouts\partials\header.php: 324b75d3d0889ffce65f25e8b0d1b57a305b9cb1
+app\layouts\partials\navbar.php: 8d64e705156b5b759687b07a6b5d4e0427f25797
+app\layouts\test.layout.php: 47a966c21b3c9be4de740e70a850e479a3e3d659
+app\lib\auth.php: 4c7cb9ab5670d88e2bc8a06ec8cf7d84ec545123
+app\lib\db.php: 59b7221d5318952a1f454b4106aa6eb933deebf1
+app\lib\view.php: 222407eadb9d723b87de209236294dd2fcda02da
+condominio.code-workspace: 91bbe424b8d19b68af4beecd519d66e26d2f3fc6
+config.php: 129851ab6f800d160e5f0700b18921724acbab9e
+estructura_compilada.txt: c594bdccb70f697c7af2a780d1995d9cd2013260
+helpers.php: d7a340dbd1be569d48cd31f3a729df4cffd8dcd9
+lp65.json: b1a5c2cd41c295e173e065899272d0b015b51be2
+public\.htaccess: b85666c4d135c22eaf7e42d9d5b136e209b09054
+public\api\theme-updates.php: a8a5a00c4d71a95e25ddd4b04c0c69bc37132b61
+public\api\theme.php: 96eb2fe8cfdb0bdb44ec6ef7b51a800a06cd0116
+public\Box.js: 857f143c9d81239ec0f5f82c4c8ff14932ed25c3
+public\css\base.css: 8add02001bd1eaf7a563a562fae8979e083e82b5
+public\css\styles.css: b122c48f298a15248a77ff6bee350cff075c8fbb
+public\css\themes\theme-blue.css: bf6bd4aaa53d185e9978ed2711251236c7a94603
+public\css\themes\theme-deepnote-dark.css: 9c029a153cb24ef1c6164750beb7682043a3a141
+public\css\themes\theme-deepnote-light.css: 2e8579965fcfb681db742ea6f6892d09389000e7
+public\css\themes\theme-green.css: b3eb68a18df8e03e89830411390bab6ca41a2463
+public\css\themes\themes-extended.css: e4af813ce2db9ead67e91de4bb4566da1b7b6e20
+public\export_estructura.php: b4bb21acec01ed07051263f56470267660522dce
+public\index.php: a1a04cec382805f0edd2e9f9e331e05559cb3a35
+public\js\theme.js: b7f57fccac660a7d91e72f04f124c7a6d957088f
+public\uploads\media\images\logo.png: ac0cfc1e6ad574876456f7bd2a75ebf43e686954
+public\uploads\media\images\profiles\.htaccess: 3e60734ebd22a2a1011b9ee0c91a041dbd8cb43c
+public\uploads\media\images\profiles\126_1760351074.jpg: 6d3f28f8143b40445b604a2c43f2f480bb12be60
+public\uploads\media\images\profiles\1_1760475685.jpg: dd848e17545df92c5eb6ee3969b53bd62b1fb8d7
+public\uploads\media\images\profiles\default.png: 90afce8e1a74516a6c757524847804c661c107bb
+public\uploads\media\images\profiles\ProfilePic.png: fb2d1f1167c127def8e531eacba17dd76d6bdd42
+
+--- Mapa MVC ---
+=================================
+
+
+=== ESTADÍSTICAS DEL PROYECTO ===
+Archivos analizados: 42
+ - htaccess: 3
+ - php: 22
+ - code-workspace: 1
+ - txt: 1
+ - json: 1
+ - js: 2
+ - css: 7
+ - png: 3
+ - jpg: 2
+Líneas totales de código: 8939
+Tamaño total del proyecto: 1068.73 KB
+Última modificación global: 02/Nov/2025 11:47:07
+Hash de integridad (MD5): d9c89985e65d9e892bbc23a2e7329231
+Versión del proyecto: v1.0-Rev1.1
+Tipo de estructura: MVC Modular Dinámico
+Formato compatible con AI: ChatGPT/Grok Structural Map v1
+=================================
+Estructura generada automáticamente por el Arquitecto 🧠 en: 02/Nov/2025 11:47:07
+
+
+
+=== FIN DE ESTRUCTURA DEL PROYECTO ===
+
+
